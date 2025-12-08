@@ -1,0 +1,1367 @@
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Expense,
+  RecurringExpense,
+  SavingsGoal,
+  Budget,
+  Wallet,
+  CategoryItem,
+  MemberItem,
+  GoogleConfig,
+  CurrencyCode,
+  TransactionType,
+  CurrencyConfig,
+  UserProfile
+} from './types';
+import {
+  CURRENCY_SYMBOLS,
+  DEFAULT_MEMBER_ITEMS,
+  DEFAULT_CATEGORY_ITEMS
+} from './constants';
+import {
+  getExpenses,
+  getRecurringExpenses,
+  getGoals,
+  getBudgets,
+  getWallets,
+  getCurrencyCode,
+  getCategories,
+  getMembers,
+  getGoogleConfig,
+  getGoogleSyncEnabled,
+  saveExpenses,
+  saveRecurringExpenses,
+  saveGoals,
+  saveBudgets,
+  saveWallets,
+  saveCurrencyCode,
+  saveCategories,
+  saveMembers,
+  saveGoogleConfig,
+  saveGoogleSyncEnabled,
+  isSetupComplete,
+  setSetupComplete,
+  getCategoryColorsMap
+} from './services/storageService';
+import {
+  initializeGapiClient,
+  handleAuthClick,
+  trySilentAuth,
+  handleSignOut,
+  fetchExpensesFromSheet,
+  saveExpensesToSheet,
+  fetchRefData,
+  saveRefData,
+  saveGoalsToSheet,
+  saveBudgetsToSheet,
+  getUserProfile
+} from './services/googleSheetsService';
+import {
+  calculateWalletBalances,
+  calculateNextDate,
+  generateFullDemoData,
+  convertToBase
+} from './utils';
+import { Dashboard } from './components/Dashboard';
+import { ExpenseTable } from './components/ExpenseTable';
+import { GoalsView } from './components/GoalsView';
+import { Home } from './components/Home';
+import { LandingPage } from './components/LandingPage';
+import { SetupWizard } from './components/SetupWizard';
+import { SettingsModal } from './components/SettingsModal';
+import { HelpModal } from './components/HelpModal';
+import { Dialog } from './components/Dialog';
+import { FeedbackModal } from './components/FeedbackModal';
+import {
+  Wallet as WalletIcon,
+  LayoutDashboard,
+  Table2,
+  Target,
+  HelpCircle,
+  Settings,
+  CloudLightning,
+  LogOut,
+  LogIn,
+  Menu,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  CircleUserRound,
+  Home as HomeIcon,
+  MessageSquare
+} from 'lucide-react';
+
+enum View {
+  HOME = 'home',
+  DASHBOARD = 'dashboard',
+  EXPENSES = 'expenses',
+  GOALS = 'goals',
+}
+
+const App: React.FC = () => {
+  // App State
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false); // New state to track if user clicked "Get Started"
+  const [isLoading, setIsLoading] = useState(true);
+
+  // App Data State
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
+  const [goals, setGoals] = useState<SavingsGoal[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+
+  // Ref Data State
+  const [categoryItems, setCategoryItems] = useState<CategoryItem[]>(DEFAULT_CATEGORY_ITEMS);
+  const [memberItems, setMemberItems] = useState<MemberItem[]>(DEFAULT_MEMBER_ITEMS);
+
+  const [currentView, setCurrentView] = useState<View>(View.HOME);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Google Sheets Integration State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false); // Used for manual sync button
+  const [googleConfig, setGoogleConfig] = useState<GoogleConfig | null>(null);
+
+  // Live Sync State
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'error' | 'offline' | 'fetching'>('offline');
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const isRemoteUpdate = useRef(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncStatusRef = useRef(syncStatus); // Ref to track status inside async polling closures
+  const isSavingRef = useRef(false); // Prevent concurrent saves
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 3;
+
+  // Currency State
+  const [currencyCode, setCurrencyCode] = useState<CurrencyCode>('USD');
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  // Dialog state
+  const [dialogState, setDialogState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+    onConfirm?: () => void;
+    showCancel?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
+
+  // Helper to show dialog
+  const showDialog = (
+    title: string,
+    message: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'info',
+    onConfirm?: () => void,
+    showCancel: boolean = false
+  ) => {
+    setDialogState({
+      isOpen: true,
+      title,
+      message,
+      type,
+      onConfirm,
+      showCancel
+    });
+  };
+
+  const closeDialog = () => {
+    setDialogState(prev => ({ ...prev, isOpen: false }));
+  };
+
+
+  // Helper to get color map for visualizations
+  const categoryColors = useMemo(() => getCategoryColorsMap(categoryItems), [categoryItems]);
+
+  // Member helpers
+  const memberList = useMemo(() => memberItems.map(m => m.name), [memberItems]);
+  const memberColors = useMemo(() => {
+    const map: Record<string, string> = {};
+    memberItems.forEach(m => map[m.name] = m.color);
+    return map;
+  }, [memberItems]);
+
+  // Compute live wallet balances
+  const computedWallets = useMemo(() => calculateWalletBalances(wallets, expenses), [wallets, expenses]);
+
+  const isSyncEnabled = getGoogleSyncEnabled();
+
+  const refreshLocalData = () => {
+    setExpenses(getExpenses());
+    setRecurringExpenses(getRecurringExpenses());
+    setGoals(getGoals());
+    setBudgets(getBudgets());
+    setWallets(getWallets());
+    setCurrencyCode(getCurrencyCode());
+    setCategoryItems(getCategories());
+    setMemberItems(getMembers());
+  };
+
+  // Keep ref in sync with state for polling
+  useEffect(() => {
+    syncStatusRef.current = syncStatus;
+  }, [syncStatus]);
+
+  // Helper to process recurring logic
+  const processRecurringExpenses = (currentExpenses: Expense[], currentRecurring: RecurringExpense[]) => {
+    const today = new Date().toISOString().split('T')[0];
+    const newExpenses: Expense[] = [];
+    let hasChanges = false;
+
+    const updatedRecurring = currentRecurring.map(rule => {
+      let currentRule = { ...rule };
+      while (currentRule.nextDueDate <= today && currentRule.active) {
+        hasChanges = true;
+        newExpenses.push({
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          date: currentRule.nextDueDate,
+          description: `${currentRule.description} (Recurring)`,
+          category: currentRule.category,
+          amount: currentRule.amount,
+          member: currentRule.member,
+          recurrence: currentRule.frequency,
+          type: currentRule.type || TransactionType.EXPENSE,
+          walletId: currentRule.walletId || 'main'
+        });
+        currentRule.nextDueDate = calculateNextDate(currentRule.nextDueDate, currentRule.frequency);
+      }
+      return currentRule;
+    });
+
+    let finalExpenses = currentExpenses;
+    if (hasChanges) {
+      finalExpenses = [...newExpenses, ...currentExpenses].sort((a, b) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+    }
+
+    return { expenses: finalExpenses, recurring: updatedRecurring, hasChanges };
+  };
+
+  // Helper to sync ref data
+  const syncRefData = async (spreadsheetId: string) => {
+    const refData = await fetchRefData(spreadsheetId);
+    if (refData.categories && refData.categories.length > 0) {
+      setCategoryItems(refData.categories);
+      saveCategories(refData.categories);
+    }
+    if (refData.members && refData.members.length > 0) {
+      setMemberItems(refData.members);
+      saveMembers(refData.members);
+    }
+    if (refData.goals && refData.goals.length > 0) {
+      setGoals(refData.goals);
+      saveGoals(refData.goals);
+    }
+    if (refData.budgets && refData.budgets.length > 0) {
+      setBudgets(refData.budgets);
+      saveBudgets(refData.budgets);
+    }
+  };
+
+  // Initial Load
+  useEffect(() => {
+    const initApp = async () => {
+      // 0. Check Setup
+      if (!isSetupComplete()) {
+        setNeedsSetup(true);
+        setIsLoading(false);
+        return;
+      }
+
+      refreshLocalData();
+
+      // Process Recurring Locally
+      const loadedExpenses = getExpenses();
+      const loadedRecurring = getRecurringExpenses();
+      const processed = processRecurringExpenses(loadedExpenses, loadedRecurring);
+      setExpenses(processed.expenses);
+      setRecurringExpenses(processed.recurring);
+
+      // Check Google Config
+      const config = getGoogleConfig();
+      if (config && config.clientId && config.apiKey) {
+        setGoogleConfig(config);
+
+        try {
+          await initializeGapiClient(config);
+
+          if (getGoogleSyncEnabled()) {
+            // Check if we have a valid token already
+            const hasToken = window.gapi?.client?.getToken();
+
+            if (hasToken) {
+              // We have a token, try to use it
+              try {
+                setIsSyncing(true);
+                setSyncStatus('fetching');
+                setIsGoogleConnected(true);
+
+                if (config.spreadsheetId) {
+                  // Fetch All Data
+                  isRemoteUpdate.current = true;
+                  const { expenses: sheetExpenses, wallets: sheetWallets } = await fetchExpensesFromSheet(config.spreadsheetId);
+
+                  if (sheetExpenses) {
+                    setExpenses(sheetExpenses);
+                    saveExpenses(sheetExpenses);
+                  }
+                  if (sheetWallets && sheetWallets.length > 0) {
+                    setWallets(sheetWallets);
+                    saveWallets(sheetWallets);
+                  }
+
+                  await syncRefData(config.spreadsheetId);
+                  setSyncStatus('synced');
+                  setLastSynced(new Date());
+                  setSyncError(null);
+                  setTimeout(() => isRemoteUpdate.current = false, 500);
+                }
+              } catch (err: any) {
+                console.warn("Token expired or invalid, user needs to reconnect.", err);
+                setIsGoogleConnected(false);
+                setSyncStatus('offline');
+                setSyncError('Session expired. Please reconnect.');
+                // Clear the invalid token
+                if (window.gapi?.client) {
+                  window.gapi.client.setToken(null);
+                }
+              } finally {
+                setIsSyncing(false);
+              }
+            } else {
+              // No token available, user needs to manually connect
+              console.log("No auth token found. User needs to connect manually.");
+              setIsGoogleConnected(false);
+              setSyncStatus('offline');
+              setSyncError(null);
+            }
+          }
+        } catch (err) {
+          console.error("GAPI Init Error", err);
+          setSyncStatus('offline');
+        }
+      }
+      setIsLoading(false);
+    };
+
+    initApp();
+
+    // Check for shared configuration in URL
+    const checkSharedConfig = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const encodedConfig = urlParams.get('config');
+
+      if (encodedConfig) {
+        try {
+          const jsonString = atob(encodedConfig);
+          const sharedConfig = JSON.parse(jsonString);
+
+          if (sharedConfig.clientId && sharedConfig.apiKey && sharedConfig.spreadsheetId) {
+            const shouldImport = window.confirm(
+              "This link contains a Data Source configuration.\n\n" +
+              "Would you like to import it?\n\n" +
+              "This will update your Google Sheets connection settings."
+            );
+
+            if (shouldImport) {
+              setGoogleConfig(sharedConfig);
+              saveGoogleConfig(sharedConfig);
+              setIsSettingsOpen(true);
+
+              // Clean up URL
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } else {
+              // Clean up URL without importing
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to parse shared configuration", e);
+          // Clean up URL on error
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+    };
+
+    checkSharedConfig();
+  }, []);
+
+  // --- Live Sync Logic ---
+
+  // 1. Enhanced Debounced Auto-Save with Retry Logic
+  useEffect(() => {
+    // Save to LocalStorage immediately
+    saveExpenses(expenses);
+    saveRecurringExpenses(recurringExpenses);
+    saveGoals(goals);
+    saveBudgets(budgets);
+    saveWallets(wallets);
+    saveCategories(categoryItems);
+    saveMembers(memberItems);
+
+    // Cloud Sync Logic
+    if (!isGoogleConnected || !googleConfig?.spreadsheetId) {
+      setSyncStatus('offline');
+      setSyncError(null);
+      return;
+    }
+
+    // Skip if this change came from a cloud fetch
+    if (isRemoteUpdate.current) return;
+
+    // Skip if already saving
+    if (isSavingRef.current) {
+      console.log('Save already in progress, skipping...');
+      return;
+    }
+
+    // Clear existing timer
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    setSyncStatus('saving');
+    setSyncError(null);
+
+    // Debounce 2s
+    saveTimeoutRef.current = setTimeout(async () => {
+      // Double-check we're not already saving
+      if (isSavingRef.current) return;
+
+      isSavingRef.current = true;
+
+      try {
+        // Verify connection before attempting save
+        if (!window.gapi?.client?.getToken()) {
+          throw new Error('Not authenticated. Please reconnect.');
+        }
+
+        await Promise.all([
+          saveExpensesToSheet(googleConfig.spreadsheetId, expenses, wallets),
+          saveRefData(googleConfig.spreadsheetId, categoryItems, memberItems),
+          saveGoalsToSheet(googleConfig.spreadsheetId, goals),
+          saveBudgetsToSheet(googleConfig.spreadsheetId, budgets)
+        ]);
+
+        setSyncStatus('synced');
+        setLastSynced(new Date());
+        setSyncError(null);
+        retryCountRef.current = 0; // Reset retry count on success
+
+      } catch (e: any) {
+        console.error("Auto-save failed", e);
+
+        // Handle specific error types
+        if (e.status === 401 || e.status === 403 || e.message?.includes('authenticated')) {
+          setSyncError('Authentication expired. Please reconnect.');
+          setSyncStatus('error');
+          setIsGoogleConnected(false);
+          retryCountRef.current = 0;
+        } else if (e.status === 404) {
+          setSyncError('Spreadsheet not found. Check your configuration.');
+          setSyncStatus('error');
+        } else if (e.message?.includes('network') || e.message?.includes('fetch')) {
+          setSyncError('Network error. Will retry automatically.');
+          setSyncStatus('error');
+
+          // Retry logic for network errors
+          if (retryCountRef.current < MAX_RETRIES) {
+            retryCountRef.current++;
+            console.log(`Retrying save (attempt ${retryCountRef.current}/${MAX_RETRIES})...`);
+
+            setTimeout(() => {
+              isSavingRef.current = false;
+              // Trigger a re-save by updating a dummy state
+              setLastSynced(new Date());
+            }, 3000 * retryCountRef.current); // Exponential backoff
+          } else {
+            setSyncError('Failed after multiple retries. Please check your connection.');
+          }
+        } else {
+          setSyncError(e.message || 'Unknown error occurred');
+          setSyncStatus('error');
+        }
+      } finally {
+        isSavingRef.current = false;
+      }
+    }, 2000);
+
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [expenses, wallets, goals, budgets, categoryItems, memberItems, recurringExpenses, isGoogleConnected, googleConfig]);
+
+  // 2. Enhanced Background Polling (Every 30s) with Health Checks
+  useEffect(() => {
+    if (!isGoogleConnected || !googleConfig?.spreadsheetId) {
+      // Clean up any existing interval
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const performPoll = async () => {
+      // Don't pull if we are currently trying to push local changes to avoid conflicts
+      if (syncStatusRef.current === 'saving' || isSavingRef.current) {
+        console.log('Skipping poll: save in progress');
+        return;
+      }
+
+      try {
+        // Health check: verify we're still authenticated
+        if (!window.gapi?.client?.getToken()) {
+          console.warn('Poll skipped: not authenticated');
+          setIsGoogleConnected(false);
+          setSyncStatus('error');
+          setSyncError('Session expired. Please reconnect.');
+          return;
+        }
+
+        setSyncStatus('fetching');
+
+        const { expenses: sheetExpenses, wallets: sheetWallets } = await fetchExpensesFromSheet(googleConfig.spreadsheetId);
+        const refData = await fetchRefData(googleConfig.spreadsheetId);
+
+        // Double check status after fetch to ensure user didn't start editing during the fetch
+        if (syncStatusRef.current === 'saving' || isSavingRef.current) {
+          console.log("User started editing during poll, discarding remote data to prevent overwrite.");
+          setSyncStatus('synced');
+          return;
+        }
+
+        isRemoteUpdate.current = true;
+
+        if (sheetExpenses) setExpenses(sheetExpenses);
+        if (sheetWallets && sheetWallets.length > 0) setWallets(sheetWallets);
+        if (refData.categories) setCategoryItems(refData.categories);
+        if (refData.members) setMemberItems(refData.members);
+        if (refData.goals) setGoals(refData.goals);
+        if (refData.budgets) setBudgets(refData.budgets);
+
+        setLastSynced(new Date());
+        setSyncStatus('synced');
+        setSyncError(null);
+
+        setTimeout(() => {
+          isRemoteUpdate.current = false;
+        }, 500);
+
+      } catch (e: any) {
+        console.error("Poll failed", e);
+
+        // Handle auth errors
+        if (e.status === 401 || e.status === 403) {
+          setIsGoogleConnected(false);
+          setSyncStatus('error');
+          setSyncError('Authentication expired. Please reconnect.');
+
+          // Clear the interval on auth failure
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+        } else {
+          // Don't set error status for transient poll failures
+          // Just log and continue polling
+          console.warn('Poll failed, will retry on next interval:', e.message);
+        }
+      }
+    };
+
+    // Perform initial poll
+    performPoll();
+
+    // Set up interval
+    pollIntervalRef.current = setInterval(performPoll, 30000); // 30s
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [isGoogleConnected, googleConfig]);
+
+
+  const handleSetupComplete = async () => {
+    setNeedsSetup(false);
+    refreshLocalData();
+    // Check if user configured manual google connection in setup
+    const config = getGoogleConfig();
+    if (config && config.clientId) {
+      setGoogleConfig(config);
+      await initializeGapiClient(config);
+    }
+  };
+
+  // Fetch user profile if connected but missing (e.g. on reload)
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (isGoogleConnected && !userProfile) {
+        const profile = await getUserProfile();
+        if (profile) setUserProfile(profile);
+      }
+    };
+    loadProfile();
+  }, [isGoogleConnected, userProfile]);
+
+  const handleSkipSetup = () => {
+    const demoData = generateFullDemoData();
+    setExpenses(demoData.expenses);
+    setRecurringExpenses([]);
+    setGoals(demoData.goals);
+    setBudgets([]);
+    setWallets(demoData.wallets);
+
+    saveExpenses(demoData.expenses);
+    saveRecurringExpenses([]);
+    saveGoals(demoData.goals);
+    saveBudgets([]);
+    saveWallets(demoData.wallets);
+    saveCategories(DEFAULT_CATEGORY_ITEMS);
+    saveMembers(DEFAULT_MEMBER_ITEMS);
+
+    setSetupComplete(true);
+    setNeedsSetup(false);
+    refreshLocalData();
+  };
+
+  // Derived Currency Config Object
+  const currencyConfig: CurrencyConfig = {
+    code: currencyCode,
+    symbol: CURRENCY_SYMBOLS[currencyCode],
+    rate: 1
+  };
+
+  // Handlers
+  const addExpense = (newExpenseData: Omit<Expense, 'id'>) => {
+    const newExpense: Expense = {
+      ...newExpenseData,
+      id: Date.now().toString(),
+      walletId: newExpenseData.walletId || 'main'
+    };
+    setExpenses(prev => [newExpense, ...prev]);
+  };
+
+  const updateExpense = (updatedExpense: Expense) => {
+    setExpenses(prev => prev.map(e => e.id === updatedExpense.id ? updatedExpense : e));
+  };
+
+  const deleteExpense = (id: string) => {
+    setExpenses(prev => prev.filter(e => e.id !== id));
+  };
+
+  const addRecurringExpense = (newRuleData: Omit<RecurringExpense, 'id'>) => {
+    const newRule: RecurringExpense = {
+      ...newRuleData,
+      id: Date.now().toString(),
+      walletId: newRuleData.walletId || 'main'
+    };
+    const processed = processRecurringExpenses(expenses, [...recurringExpenses, newRule]);
+    setExpenses(processed.expenses);
+    setRecurringExpenses(processed.recurring);
+  };
+
+  const deleteRecurringExpense = (id: string) => {
+    setRecurringExpenses(prev => prev.filter(r => r.id !== id));
+  };
+
+  const addGoal = (newGoalData: Omit<SavingsGoal, 'id'>) => {
+    const newGoal: SavingsGoal = {
+      ...newGoalData,
+      id: Date.now().toString()
+    };
+    setGoals(prev => [...prev, newGoal]);
+  };
+
+  const updateGoal = (updatedGoal: SavingsGoal) => {
+    setGoals(prev => prev.map(g => g.id === updatedGoal.id ? updatedGoal : g));
+  };
+
+  const deleteGoal = (id: string) => {
+    setGoals(prev => prev.filter(g => g.id !== id));
+  };
+
+  const addBudget = (newBudget: Budget) => {
+    setBudgets(prev => [...prev, newBudget]);
+  };
+
+  const deleteBudget = (id: string) => {
+    setBudgets(prev => prev.filter(b => b.id !== id));
+  };
+
+  const updateBudget = (updatedBudget: Budget) => {
+    setBudgets(prev => prev.map(b => b.id === updatedBudget.id ? updatedBudget : b));
+  };
+
+  const addWallet = (newWalletData: Omit<Wallet, 'id'>) => {
+    const newWalletId = Math.random().toString(36).substr(2, 9);
+
+    const newWallet: Wallet = {
+      ...newWalletData,
+      id: newWalletId,
+      balance: 0
+    };
+
+    setWallets(prev => [...prev, newWallet]);
+
+    if (newWalletData.balance > 0) {
+      addExpense({
+        date: new Date().toISOString().split('T')[0],
+        description: 'Initial Deposit',
+        category: 'Other',
+        amount: newWalletData.balance,
+        member: memberItems[0]?.name || 'Admin',
+        type: TransactionType.INCOME,
+        walletId: newWalletId
+      });
+    }
+  };
+
+  const updateWallet = (updatedWallet: Wallet) => {
+    setWallets(prev => prev.map(w => w.id === updatedWallet.id ? updatedWallet : w));
+  };
+
+  const deleteWallet = (id: string) => {
+    setWallets(prev => prev.filter(w => w.id !== id));
+  };
+
+  const handleTransfer = (data: { sourceId: string; destId: string; amount: number; date: string; description: string }) => {
+    addExpense({
+      date: data.date,
+      description: data.description,
+      amount: data.amount,
+      category: 'Transfer',
+      member: memberItems[0]?.name || 'Admin',
+      type: TransactionType.TRANSFER,
+      walletId: data.sourceId,
+      transferToWalletId: data.destId
+    });
+
+    const sourceGoal = goals.find(g => g.id === data.sourceId);
+    if (sourceGoal) {
+      updateGoal({ ...sourceGoal, currentAmount: sourceGoal.currentAmount - data.amount });
+    }
+
+    const destGoal = goals.find(g => g.id === data.destId);
+    if (destGoal) {
+      updateGoal({ ...destGoal, currentAmount: destGoal.currentAmount + data.amount });
+    }
+  };
+
+  const handleRenameCategory = (oldName: string, newName: string) => {
+    const updatedExpenses = expenses.map(e =>
+      e.category === oldName ? { ...e, category: newName } : e
+    );
+    setExpenses(updatedExpenses);
+    const updatedRecurring = recurringExpenses.map(r =>
+      r.category === oldName ? { ...r, category: newName } : r
+    );
+    setRecurringExpenses(updatedRecurring);
+    setBudgets(prev => prev.map(b => b.category === oldName ? { ...b, category: newName } : b));
+  };
+
+  const handleConnectGoogle = async (config: GoogleConfig) => {
+    setGoogleConfig(config);
+    saveGoogleConfig(config);
+
+    if (!config.clientId || !config.apiKey || !config.spreadsheetId) {
+      setIsGoogleConnected(false);
+      saveGoogleSyncEnabled(false);
+      setSyncError('Missing configuration. Please provide all required fields.');
+      setSyncStatus('error');
+      return;
+    }
+
+    try {
+      setIsSyncing(true);
+      setSyncStatus('fetching');
+      setSyncError(null);
+
+      await initializeGapiClient(config);
+      await handleAuthClick();
+
+      isRemoteUpdate.current = true;
+      const { expenses: sheetExpenses, wallets: sheetWallets } = await fetchExpensesFromSheet(config.spreadsheetId);
+
+      const isSheetEmpty = sheetExpenses.length === 0;
+
+      if (!isSheetEmpty) {
+        setExpenses(sheetExpenses);
+        if (sheetWallets && sheetWallets.length > 0) {
+          setWallets(sheetWallets);
+        }
+        await syncRefData(config.spreadsheetId);
+      } else {
+        if (expenses.length > 0 || wallets.length > 1) {
+          await saveExpensesToSheet(config.spreadsheetId, expenses, wallets);
+          await saveRefData(config.spreadsheetId, categoryItems, memberItems);
+          await saveGoalsToSheet(config.spreadsheetId, goals);
+          await saveBudgetsToSheet(config.spreadsheetId, budgets);
+        }
+      }
+
+      const profile = await getUserProfile();
+      if (profile) setUserProfile(profile);
+
+      setIsGoogleConnected(true);
+      saveGoogleSyncEnabled(true);
+      setSyncStatus('synced');
+      setLastSynced(new Date());
+      setSyncError(null);
+      setTimeout(() => isRemoteUpdate.current = false, 500);
+    } catch (error: any) {
+      console.error("Google Connect Error", error);
+
+      let errorMessage = 'Failed to connect to Google Sheets.';
+
+      if (error.message?.includes('client_id') || error.message?.includes('apiKey')) {
+        errorMessage = 'Invalid API credentials. Please check your Client ID and API Key.';
+      } else if (error.status === 404) {
+        errorMessage = 'Spreadsheet not found. Please check the Spreadsheet ID.';
+      } else if (error.status === 403) {
+        errorMessage = 'Access denied. Please check spreadsheet permissions.';
+      } else if (error.message?.includes('not loaded')) {
+        errorMessage = 'Google API failed to load. Please check your internet connection.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      setSyncError(errorMessage);
+      setSyncStatus('error');
+
+      showDialog(
+        'Connection Failed',
+        errorMessage,
+        'error',
+        undefined
+      );
+
+      setIsGoogleConnected(false);
+      saveGoogleSyncEnabled(false);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleDisconnectGoogle = () => {
+    showDialog(
+      'Confirm Sign Out',
+      'Are you sure you want to disconnect from Google Sheets?\n\nYour data will remain in local storage, but live sync will stop until you reconnect.',
+      'warning',
+      () => {
+        handleSignOut();
+        setIsGoogleConnected(false);
+        saveGoogleSyncEnabled(false);
+        setSyncStatus('offline');
+        setSyncError(null);
+
+        // Clean up polling interval
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      },
+      true  // Show cancel button
+    );
+  };
+
+  const handleManualSync = async () => {
+    if (!googleConfig) {
+      setIsSettingsOpen(true);
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncStatus('fetching');
+    try {
+      if (!isGoogleConnected) {
+        try {
+          await initializeGapiClient(googleConfig);
+          await handleAuthClick();
+          setIsGoogleConnected(true);
+          saveGoogleSyncEnabled(true);
+        } catch (e) {
+          console.error("Re-auth failed", e);
+          setIsSyncing(false);
+          setSyncStatus('error');
+          return;
+        }
+      }
+
+      isRemoteUpdate.current = true;
+      const { expenses: sheetExpenses, wallets: sheetWallets } = await fetchExpensesFromSheet(googleConfig.spreadsheetId);
+      if (sheetExpenses) {
+        setExpenses(sheetExpenses);
+      }
+      if (sheetWallets) {
+        setWallets(sheetWallets);
+      }
+      await syncRefData(googleConfig.spreadsheetId);
+      setSyncStatus('synced');
+      setLastSynced(new Date());
+
+      if (!userProfile) {
+        const profile = await getUserProfile();
+        if (profile) setUserProfile(profile);
+      }
+
+      setTimeout(() => isRemoteUpdate.current = false, 500);
+
+    } catch (e) {
+      console.error(e);
+      setSyncStatus('error');
+      try {
+        await handleAuthClick();
+        setIsGoogleConnected(true);
+      } catch (authErr) {
+        setIsGoogleConnected(false);
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleResetData = () => {
+    const demoData = generateFullDemoData();
+    setExpenses(demoData.expenses);
+    setRecurringExpenses([]);
+    setGoals(demoData.goals);
+    setBudgets([]);
+    setWallets(demoData.wallets);
+    saveCategories(DEFAULT_CATEGORY_ITEMS);
+    saveMembers(DEFAULT_MEMBER_ITEMS);
+
+    handleDisconnectGoogle();
+    refreshLocalData();
+  };
+
+  const handleClearData = () => {
+    setExpenses([]);
+    setRecurringExpenses([]);
+    setGoals([]);
+    setBudgets([]);
+    setWallets([{ id: 'main', name: 'Main Wallet', type: 'MAIN', balance: 0 }]);
+    handleDisconnectGoogle();
+  };
+
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+  if (isLoading) return <div className="flex h-screen items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div></div>;
+
+  if (needsSetup) {
+    if (!hasStarted) {
+      return <LandingPage onGetStarted={() => setHasStarted(true)} />;
+    }
+    return <SetupWizard onComplete={handleSetupComplete} onSkip={handleSkipSetup} />;
+  }
+
+  // Helper for Status Badge
+  const getStatusBadge = () => {
+    if (!isGoogleConnected) return null;
+
+    if (syncStatus === 'saving') {
+      return (
+        <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-100">
+          <RefreshCw size={10} className="animate-spin" /> Saving...
+        </span>
+      );
+    }
+    if (syncStatus === 'fetching') {
+      return (
+        <span className="flex items-center gap-1.5 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full border border-blue-100">
+          <Loader2 size={10} className="animate-spin" /> Syncing...
+        </span>
+      );
+    }
+    if (syncStatus === 'error') {
+      return (
+        <span
+          className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-100 cursor-help"
+          title={syncError || 'Sync error occurred'}
+        >
+          <AlertTriangle size={10} /> Sync Error
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-100" title={`Last synced: ${lastSynced?.toLocaleTimeString()}`}>
+        <CheckCircle2 size={10} /> Live
+      </span>
+    );
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onConnect={handleConnectGoogle}
+        onDisconnect={handleDisconnectGoogle}
+        isConnected={isGoogleConnected}
+        onCurrencyChange={setCurrencyCode}
+        onResetData={handleResetData}
+        onClearData={handleClearData}
+        categoryItems={categoryItems}
+        members={memberItems}
+        onUpdateCategoryItems={setCategoryItems}
+        onUpdateMembers={setMemberItems}
+        onRenameCategory={handleRenameCategory}
+        userProfile={userProfile}
+      />
+
+      <HelpModal
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+      />
+
+      <FeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+      />
+
+      {isProfileMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-transparent"
+          onClick={() => setIsProfileMenuOpen(false)}
+        />
+      )}
+
+      <Dialog
+        isOpen={dialogState.isOpen}
+        onClose={closeDialog}
+        onConfirm={dialogState.onConfirm}
+        title={dialogState.title}
+        message={dialogState.message}
+        type={dialogState.type}
+        showCancel={dialogState.showCancel}
+      />
+
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/20 z-20 lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      <aside className={`
+        fixed lg:static inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <div className="h-full flex flex-col">
+          <div className="p-6 flex items-center gap-3 border-b border-gray-100">
+            <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center text-white">
+              <WalletIcon size={18} />
+            </div>
+            <h1 className="text-xl font-bold text-gray-800 tracking-tight">FamilyFinance</h1>
+          </div>
+
+          <nav className="flex-1 p-4 space-y-2">
+            <button
+              onClick={() => { setCurrentView(View.HOME); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.HOME
+                ? 'bg-green-50 text-green-700 shadow-sm'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+            >
+              <HomeIcon size={20} />
+              Home
+            </button>
+            <button
+              onClick={() => { setCurrentView(View.DASHBOARD); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.DASHBOARD
+                ? 'bg-green-50 text-green-700 shadow-sm'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+            >
+              <LayoutDashboard size={20} />
+              Dashboard
+            </button>
+            <button
+              onClick={() => { setCurrentView(View.EXPENSES); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.EXPENSES
+                ? 'bg-green-50 text-green-700 shadow-sm'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+            >
+              <Table2 size={20} />
+              Transactions
+            </button>
+            <button
+              onClick={() => { setCurrentView(View.GOALS); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.GOALS
+                ? 'bg-green-50 text-green-700 shadow-sm'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+            >
+              <Target size={20} />
+              Goals & Wallets
+            </button>
+          </nav>
+
+          <div className="p-4 border-t border-gray-100 space-y-2">
+            <button
+              onClick={() => setIsHelpOpen(true)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all"
+            >
+              <HelpCircle size={20} />
+              Help & Tutorials
+            </button>
+            <button
+              onClick={() => setIsFeedbackOpen(true)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all"
+            >
+              <MessageSquare size={20} />
+              Feedback / Issues
+            </button>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all"
+            >
+              <Settings size={20} />
+              Settings
+            </button>
+
+            {isGoogleConnected ? (
+              <>
+                <button
+                  onClick={handleManualSync}
+                  disabled={isSyncing || syncStatus === 'saving'}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all border border-gray-200"
+                >
+                  <RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />
+                  {isSyncing ? "Refreshing..." : "Refresh Data"}
+                </button>
+                <div className="text-[10px] text-center text-gray-400">
+                  {syncStatus === 'saving' ? (
+                    <span className="text-amber-600 font-medium animate-pulse">Auto-saving...</span>
+                  ) : syncStatus === 'error' && syncError ? (
+                    <span className="text-red-600 font-medium">{syncError}</span>
+                  ) : (
+                    lastSynced ? `Synced: ${lastSynced.toLocaleTimeString()}` : ''
+                  )}
+                </div>
+                <button
+                  onClick={handleDisconnectGoogle}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-xl transition-all mt-2 border border-transparent hover:border-red-100"
+                >
+                  <LogOut size={20} />
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={isSyncEnabled ? handleManualSync : () => setIsSettingsOpen(true)}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all mt-2 ${isSyncEnabled ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-gray-500 hover:bg-gray-100'}`}
+              >
+                <LogIn size={20} />
+                {isSyncEnabled ? 'Reconnect Sync' : 'Connect Google'}
+              </button>
+            )}
+
+          </div>
+        </div>
+      </aside>
+
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-center lg:justify-between px-6 lg:px-8 shrink-0">
+          <div className="flex items-center gap-4 w-full lg:w-auto">
+            <button onClick={toggleSidebar} className="lg:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+              <Menu size={20} />
+            </button>
+            <h2 className="text-lg font-semibold text-gray-800">
+              {currentView === View.HOME ? 'Home' : currentView === View.DASHBOARD ? 'Wallet Overview' : currentView === View.EXPENSES ? 'Transactions' : 'Financial Goals'}
+            </h2>
+          </div>
+          <div className="hidden lg:flex items-center gap-4 relative">
+            {getStatusBadge()}
+
+            <div className="flex flex-col items-end">
+              <span className="text-xs text-gray-500">Currency</span>
+              <span className="text-sm font-semibold text-gray-800">{currencyCode} ({CURRENCY_SYMBOLS[currencyCode]})</span>
+            </div>
+
+            {!isGoogleConnected && (
+              <button
+                onClick={isSyncEnabled ? handleManualSync : () => setIsSettingsOpen(true)}
+                className={`hidden xl:flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg shadow-sm transition-all ${isSyncEnabled
+                  ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                  }`}
+              >
+                {isSyncEnabled ? <RefreshCw size={14} /> : <CloudLightning size={14} />}
+                {isSyncEnabled ? 'Reconnect' : 'Connect'}
+              </button>
+            )}
+
+            <button
+              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+              className="relative focus:outline-none transition-transform active:scale-95"
+            >
+              {userProfile?.picture ? (
+                <img
+                  src={userProfile.picture}
+                  alt={userProfile.name}
+                  className={`w-10 h-10 rounded-full border-2 shadow-lg object-cover ${isProfileMenuOpen ? 'border-green-500 ring-2 ring-green-100' : 'border-white'}`}
+                />
+              ) : (
+                <div className={`w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 border-2 shadow-lg flex items-center justify-center ${isProfileMenuOpen ? 'border-green-500' : 'border-white'}`}>
+                  <CircleUserRound className="text-white" size={24} strokeWidth={2} />
+                </div>
+              )}
+            </button>
+
+            {/* Profile Dropdown */}
+            {isProfileMenuOpen && (
+              <div className="absolute top-full right-0 mt-3 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                {userProfile ? (
+                  <div className="p-5 border-b border-gray-50 bg-gradient-to-b from-gray-50 to-white">
+                    <div className="flex flex-col items-center text-center">
+                      {userProfile.picture ? (
+                        <img src={userProfile.picture} alt={userProfile.name} className="w-16 h-16 rounded-full border-4 border-white shadow-md mb-3" />
+                      ) : (
+                        <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-2xl mb-3 border-4 border-white shadow-md">
+                          {userProfile.name?.charAt(0) || 'U'}
+                        </div>
+                      )}
+                      <h3 className="font-bold text-gray-900 text-lg">{userProfile.name}</h3>
+                      <p className="text-sm text-gray-500">{userProfile.email}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-5 text-center border-b border-gray-50">
+                    <p className="text-sm text-gray-500 italic">Guest User</p>
+                    <p className="text-xs text-gray-400 mt-1">Sign in to sync data</p>
+                  </div>
+                )}
+
+                <div className="p-2 space-y-1">
+                  <button
+                    onClick={() => { setIsSettingsOpen(true); setIsProfileMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    <Settings size={18} className="text-gray-400" />
+                    Settings
+                  </button>
+
+                  {isGoogleConnected && (
+                    <button
+                      onClick={() => { handleDisconnectGoogle(); setIsProfileMenuOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <LogOut size={18} />
+                      Sign Out
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </header>
+
+        {!isGoogleConnected && (
+          <div className={`border-b px-6 py-2 flex items-center justify-between shrink-0 ${isSyncEnabled ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-200'}`}>
+            <div className={`flex items-center gap-2 text-xs ${isSyncEnabled ? 'text-amber-800' : 'text-gray-500'}`}>
+              <AlertTriangle size={14} className={isSyncEnabled ? "text-amber-600" : "text-gray-400"} />
+              <span className="font-semibold">{isSyncEnabled ? 'Sync Paused:' : 'Local Storage Mode:'}</span>
+              <span>{isSyncEnabled ? 'Session expired or needs verification.' : 'Data is saved only on this browser.'}</span>
+            </div>
+            {/* <button
+              onClick={isSyncEnabled ? handleManualSync : () => setIsSettingsOpen(true)}
+              className={`text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2 ${isSyncEnabled
+                ? 'bg-white text-amber-700 border border-amber-200 hover:bg-amber-50 hover:border-amber-300'
+                : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-md hover:from-blue-700 hover:to-indigo-700 active:scale-95 border border-transparent'
+                }`}
+            >
+              {isSyncEnabled ? <RefreshCw size={14} /> : <CloudLightning size={14} />}
+              {isSyncEnabled ? 'Reconnect Now' : 'Connect Cloud'}
+            </button> */}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-auto p-4 lg:p-8">
+          <div className="max-w-7xl mx-auto h-full">
+            {currentView === View.HOME ? (
+              <Home
+                expenses={expenses}
+                onAddExpense={addExpense}
+                onUpdateExpense={updateExpense}
+                onDeleteExpense={deleteExpense}
+                onAddRecurring={addRecurringExpense}
+                currencyConfig={currencyConfig}
+                categoryItems={categoryItems}
+                members={memberList}
+                categoryColors={categoryColors}
+                wallets={computedWallets}
+              />
+            ) : currentView === View.DASHBOARD ? (
+              <Dashboard
+                expenses={expenses}
+                currencyConfig={currencyConfig}
+                categoryColors={categoryColors}
+                memberColors={memberColors}
+                budgets={budgets}
+                onAddBudget={addBudget}
+                onDeleteBudget={deleteBudget}
+                onUpdateBudget={updateBudget}
+                categoryItems={categoryItems}
+                wallets={computedWallets}
+                goals={goals}
+              />
+            ) : currentView === View.EXPENSES ? (
+              <ExpenseTable
+                expenses={expenses}
+                onAddExpense={addExpense}
+                onUpdateExpense={updateExpense}
+                onDeleteExpense={deleteExpense}
+                recurringExpenses={recurringExpenses}
+                onAddRecurring={addRecurringExpense}
+                onDeleteRecurring={deleteRecurringExpense}
+                currencyConfig={currencyConfig}
+                categoryItems={categoryItems}
+                members={memberList}
+                categoryColors={categoryColors}
+                wallets={computedWallets}
+                goals={goals}
+              />
+            ) : (
+              <GoalsView
+                goals={goals}
+                wallets={computedWallets}
+                onAddGoal={addGoal}
+                onUpdateGoal={updateGoal}
+                onDeleteGoal={deleteGoal}
+                onAddWallet={addWallet}
+                onUpdateWallet={updateWallet}
+                onDeleteWallet={deleteWallet}
+                onTransfer={handleTransfer}
+                currencyConfig={currencyConfig}
+                onAddExpense={addExpense}
+                categoryItems={categoryItems}
+                members={memberList}
+              />
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default App;

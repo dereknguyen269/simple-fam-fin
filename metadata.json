@@ -1,0 +1,5 @@
+{
+  "name": "FamilyFinanceAI",
+  "description": "A comprehensive family expense manager with an Excel-like database view and visual dashboards.",
+  "requestFramePermissions": []
+}
