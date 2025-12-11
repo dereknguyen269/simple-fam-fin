@@ -94,6 +94,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Safe origin detection
   const [currentOrigin, setCurrentOrigin] = useState('');
+  const [isSafari, setIsSafari] = useState(false);
 
   // Helper to show dialog
   const showDialog = (
@@ -121,6 +122,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setCurrentOrigin(window.location.origin);
+      // Detect Safari browser
+      const userAgent = navigator.userAgent;
+      const isSafariBrowser = /^((?!chrome|android).)*safari/i.test(userAgent);
+      setIsSafari(isSafariBrowser);
     }
 
     const savedConfig = getGoogleConfig();
@@ -1100,6 +1105,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 )}
               </div>
+
+              {/* Safari Popup Warning */}
+              {isSafari && !isConnected && (
+                <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3 animate-fade-in">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={16} />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-amber-900 mb-1">⚠️ Safari Users: Enable Popups</h4>
+                      <p className="text-xs text-amber-800 leading-relaxed mb-2">
+                        Safari blocks popups by default. To connect with Google, you need to allow popups for this site.
+                      </p>
+                      <div className="bg-white/60 rounded p-2 mb-2">
+                        <p className="text-xs font-semibold text-amber-900 mb-1">Quick Fix:</p>
+                        <ol className="text-xs text-amber-800 ml-4 list-decimal space-y-1">
+                          <li>Click "Save & Connect" below</li>
+                          <li>Look for the popup blocker icon in Safari's address bar (left side)</li>
+                          <li>Click it and select <strong>"Always Allow Pop-ups on This Website"</strong></li>
+                          <li>Click "Save & Connect" again</li>
+                        </ol>
+                      </div>
+                      <p className="text-xs text-amber-700 italic">
+                        Or go to: Safari → Settings → Websites → Pop-up Windows → Allow for this site
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
 

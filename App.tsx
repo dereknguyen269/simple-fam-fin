@@ -45,7 +45,8 @@ import {
   isSetupComplete,
   setSetupComplete,
   getCategoryColorsMap,
-  getGoogleToken
+  getGoogleToken,
+  saveGoogleToken
 } from './services/storageService';
 import {
   initializeGapiClient,
@@ -858,7 +859,7 @@ const App: React.FC = () => {
       setSyncError(null);
 
       await initializeGapiClient(config);
-      await handleAuthClick();
+      await handleAuthClick(config.clientId);
 
       isRemoteUpdate.current = true;
       const { expenses: sheetExpenses, wallets: sheetWallets } = await fetchExpensesFromSheet(config.spreadsheetId);
@@ -893,8 +894,22 @@ const App: React.FC = () => {
       console.error("Google Connect Error", error);
 
       let errorMessage = 'Failed to connect to Google Sheets.';
+      let errorTitle = 'Connection Failed';
 
-      if (error.message?.includes('client_id') || error.message?.includes('apiKey')) {
+      // Handle popup blocked errors
+      if (error.message === 'SAFARI_POPUP_BLOCKED') {
+        errorTitle = 'Popup Blocked by Safari';
+        errorMessage = 'Safari blocked the Google Sign-In popup.\n\n' +
+          'To fix this:\n' +
+          '1. Look for the popup blocker icon in Safari\'s address bar (usually on the left)\n' +
+          '2. Click it and select "Always Allow Pop-ups on This Website"\n' +
+          '3. Try connecting again\n\n' +
+          'Alternatively, go to Safari → Settings → Websites → Pop-up Windows and allow popups for this site.';
+      } else if (error.message === 'POPUP_BLOCKED') {
+        errorTitle = 'Popup Blocked';
+        errorMessage = 'Your browser blocked the Google Sign-In popup.\n\n' +
+          'Please allow popups for this site and try again.';
+      } else if (error.message?.includes('client_id') || error.message?.includes('apiKey')) {
         errorMessage = 'Invalid API credentials. Please check your Client ID and API Key.';
       } else if (error.status === 404) {
         errorMessage = 'Spreadsheet not found. Please check the Spreadsheet ID.';
@@ -910,7 +925,7 @@ const App: React.FC = () => {
       setSyncStatus('error');
 
       showDialog(
-        'Connection Failed',
+        errorTitle,
         errorMessage,
         'error',
         undefined
@@ -1005,7 +1020,7 @@ const App: React.FC = () => {
       if (!isGoogleConnected) {
         try {
           await initializeGapiClient(googleConfig);
-          await handleAuthClick();
+          await handleAuthClick(googleConfig.clientId);
           setIsGoogleConnected(true);
           saveGoogleSyncEnabled(true);
         } catch (e) {
@@ -1039,7 +1054,7 @@ const App: React.FC = () => {
       console.error(e);
       setSyncStatus('error');
       try {
-        await handleAuthClick();
+        await handleAuthClick(googleConfig?.clientId);
         setIsGoogleConnected(true);
       } catch (authErr) {
         setIsGoogleConnected(false);

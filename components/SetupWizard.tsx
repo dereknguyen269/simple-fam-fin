@@ -187,7 +187,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip, on
 
     try {
       await initializeGapiClient(configToUse);
-      await handleAuthClick();
+      await handleAuthClick(configToUse.clientId);
 
       const { expenses, wallets } = await fetchExpensesFromSheet(configToUse.spreadsheetId);
       const refData = await fetchRefData(configToUse.spreadsheetId);

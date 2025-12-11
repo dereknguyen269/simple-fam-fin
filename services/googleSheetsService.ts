@@ -90,7 +90,57 @@ export const initializeGapiClient = async (config: GoogleConfig): Promise<void> 
   });
 };
 
-export const handleAuthClick = (): Promise<void> => {
+// Safari-compatible OAuth flow using redirect
+const handleSafariAuth = (clientId: string): void => {
+  const redirectUri = window.location.origin + window.location.pathname;
+  const state = Math.random().toString(36).substring(7);
+  sessionStorage.setItem('oauth_state', state);
+
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('response_type', 'token');
+  authUrl.searchParams.set('scope', SCOPES);
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('prompt', 'consent');
+
+  // Redirect to Google OAuth
+  window.location.href = authUrl.toString();
+};
+
+// Check for OAuth redirect callback
+export const checkOAuthCallback = (): { access_token?: string; error?: string } | null => {
+  const hash = window.location.hash.substring(1);
+  const params = new URLSearchParams(hash);
+
+  if (params.has('access_token')) {
+    const state = params.get('state');
+    const savedState = sessionStorage.getItem('oauth_state');
+
+    if (state === savedState) {
+      sessionStorage.removeItem('oauth_state');
+      const token = {
+        access_token: params.get('access_token'),
+        expires_in: params.get('expires_in'),
+        token_type: params.get('token_type'),
+        scope: params.get('scope')
+      };
+
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+
+      return token;
+    }
+  }
+
+  if (params.has('error')) {
+    return { error: params.get('error') || 'Unknown error' };
+  }
+
+  return null;
+};
+
+export const handleAuthClick = (clientId?: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     if (!tokenClient) {
       reject("Token client not initialized");
@@ -102,26 +152,44 @@ export const handleAuthClick = (): Promise<void> => {
       return;
     }
 
+    // NOTE: Safari redirect flow disabled due to OAuth redirect_uri configuration complexity
+    // Users will need to allow popups in Safari settings
+    // Detect Safari for better error messages
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+    // Use popup flow for all browsers
     tokenClient.callback = async (resp: any) => {
       if (resp.error) {
-        reject(resp);
+        // Detect popup blocked errors
+        if (resp.error === 'popup_closed_by_user' || resp.error === 'popup_failed_to_open') {
+          const error: any = new Error(isSafari ?
+            'SAFARI_POPUP_BLOCKED' :
+            'POPUP_BLOCKED'
+          );
+          error.originalError = resp.error;
+          reject(error);
+        } else {
+          reject(resp);
+        }
         return;
       }
 
-      // Set the token for gapi client
       if (resp.access_token && window.gapi.client) {
         window.gapi.client.setToken(resp);
-        // Save token to localStorage for persistence
         saveGoogleToken(resp);
       }
 
       resolve();
     };
 
-    if (window.gapi.client.getToken() === null) {
-      tokenClient.requestAccessToken({ prompt: 'consent' });
-    } else {
-      tokenClient.requestAccessToken({ prompt: '' });
+    const hasToken = window.gapi.client.getToken() !== null;
+
+    try {
+      tokenClient.requestAccessToken({
+        prompt: hasToken ? '' : 'consent'
+      });
+    } catch (error) {
+      reject(error);
     }
   });
 };
