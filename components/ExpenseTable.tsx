@@ -48,6 +48,8 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
 
   // Filter State
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
@@ -306,42 +308,105 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
     );
   };
 
-  const exportToCSV = () => {
-    // Basic CSV Export
-    const headers = ['Date', 'Type', 'Description', 'Category', 'Member', 'Wallet', 'Amount', 'Payment Method', 'Recurrence'];
+  const exportToCSV = async () => {
+    // Optimized CSV Export for large datasets (>1000 rows)
+    const totalRows = sortedExpenses.length;
+    const isLargeDataset = totalRows > 1000;
 
-    // Helper to get raw name for CSV
-    const getWalletNameRaw = (id: string) => {
-      const w = wallets.find(wal => wal.id === id);
-      if (w) return w.name;
-      const g = goals.find(goal => goal.id === id);
-      if (g) return `Goal: ${g.name}`;
-      return 'Unknown';
-    };
+    if (isExporting) return; // Prevent multiple simultaneous exports
 
-    const rows = sortedExpenses.map(e => [
-      e.date,
-      e.type || TransactionType.EXPENSE,
-      `"${e.description.replace(/"/g, '""')}"`,
-      e.category,
-      e.member,
-      getWalletNameRaw(e.walletId),
-      formatCurrency(e.amount, currencyConfig), // Use formatCurrency to include symbol in CSV
-      e.paymentMethod || 'Cash',
-      e.recurrence || 'One-time'
-    ]);
+    setIsExporting(true);
+    setExportProgress(0);
 
-    const csvContent = "data:text/csv;charset=utf-8,"
-      + headers.join(",") + "\n"
-      + rows.map(e => e.join(",")).join("\n");
+    try {
+      const headers = ['Date', 'Type', 'Description', 'Category', 'Member', 'Wallet', 'Amount', 'Payment Method', 'Recurrence'];
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "family_expenses.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      // Helper to get raw name for CSV
+      const getWalletNameRaw = (id: string) => {
+        const w = wallets.find(wal => wal.id === id);
+        if (w) return w.name;
+        const g = goals.find(goal => goal.id === id);
+        if (g) return `Goal: ${g.name}`;
+        return 'Unknown';
+      };
+
+      // Helper to escape CSV values
+      const escapeCSV = (value: string | number) => {
+        const str = String(value);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      // Process rows in chunks for better performance
+      const CHUNK_SIZE = 500;
+      const csvLines: string[] = [headers.join(',')];
+
+      // Process in chunks to avoid blocking the UI
+      for (let i = 0; i < sortedExpenses.length; i += CHUNK_SIZE) {
+        // Use requestAnimationFrame for non-blocking processing
+        await new Promise(resolve => requestAnimationFrame(resolve));
+
+        const chunk = sortedExpenses.slice(i, i + CHUNK_SIZE);
+
+        const chunkRows = chunk.map(e => {
+          const walletName = e.type === TransactionType.TRANSFER && e.transferToWalletId
+            ? `${getWalletNameRaw(e.walletId)} → ${getWalletNameRaw(e.transferToWalletId)}`
+            : getWalletNameRaw(e.walletId);
+
+          return [
+            e.date,
+            e.type || TransactionType.EXPENSE,
+            escapeCSV(e.description),
+            e.category,
+            e.member,
+            escapeCSV(walletName),
+            formatCurrency(e.amount, currencyConfig),
+            e.paymentMethod || 'Cash',
+            e.recurrence || 'One-time'
+          ].join(',');
+        });
+
+        csvLines.push(...chunkRows);
+
+        // Update progress
+        const progress = Math.min(((i + CHUNK_SIZE) / totalRows) * 100, 100);
+        setExportProgress(progress);
+      }
+
+      // Use Blob API for better performance and no size limits (vs data URI)
+      const csvContent = csvLines.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+      // Create download link
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+
+      link.setAttribute('href', url);
+      link.setAttribute('download', `family_expenses_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clean up the URL object
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+
+      // Show completion briefly
+      setExportProgress(100);
+      setTimeout(() => {
+        setIsExporting(false);
+        setExportProgress(0);
+      }, 1000);
+
+    } catch (error) {
+      console.error('Export failed:', error);
+      setIsExporting(false);
+      setExportProgress(0);
+      alert('Failed to export CSV. Please try again.');
+    }
   };
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -487,11 +552,39 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
             </button>
             <button
               onClick={exportToCSV}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              disabled={isExporting}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all relative overflow-hidden ${isExporting
+                  ? 'text-white bg-green-600 border border-green-600 cursor-wait'
+                  : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'
+                }`}
+              title={isExporting ? `Exporting... ${exportProgress.toFixed(0)}%` : 'Export to CSV'}
             >
-              <Download size={16} />
-              <span className="hidden sm:inline">Export CSV</span>
-              <span className="sm:hidden">Export</span>
+              {/* Progress bar background */}
+              {isExporting && (
+                <div
+                  className="absolute inset-0 bg-green-700 transition-all duration-300"
+                  style={{ width: `${exportProgress}%` }}
+                />
+              )}
+
+              {/* Button content */}
+              <div className="relative z-10 flex items-center gap-2">
+                {isExporting ? (
+                  <>
+                    <div className="animate-spin">
+                      <RotateCw size={16} />
+                    </div>
+                    <span className="hidden sm:inline">Exporting... {exportProgress.toFixed(0)}%</span>
+                    <span className="sm:hidden">{exportProgress.toFixed(0)}%</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={16} />
+                    <span className="hidden sm:inline">Export CSV</span>
+                    <span className="sm:hidden">Export</span>
+                  </>
+                )}
+              </div>
             </button>
             <button
               onClick={handleAddNewClick}

@@ -50,7 +50,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     // Default to Expense
     const defaultType = defaultValues?.type || TransactionType.EXPENSE;
     const initialCats = getCategoriesByType(defaultType);
-    
+
     return {
       date: new Date().toISOString().split('T')[0],
       description: '',
@@ -66,9 +66,8 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
   const [formData, setFormData] = useState<ExpenseFormData>(getInitialState());
   const [initialState, setInitialState] = useState<ExpenseFormData>(getInitialState());
-  const [showSuccess, setShowSuccess] = useState(false);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
-  
+
   // Calculator State
   const [showCalculator, setShowCalculator] = useState(false);
   const [calcExpression, setCalcExpression] = useState('');
@@ -79,65 +78,79 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     return getCategoriesByType(type);
   }, [formData.type, categoryItems]);
 
+  // Track the expense ID to detect when we're editing a different expense
+  const [lastExpenseId, setLastExpenseId] = useState<string | undefined>(undefined);
+
   useEffect(() => {
     if (isOpen) {
-      let startState: ExpenseFormData;
+      // Only reset form when:
+      // 1. Modal just opened (isOpen changed)
+      // 2. Editing a different expense (expenseToEdit.id changed)
+      const currentExpenseId = expenseToEdit?.id;
+      const shouldReset = lastExpenseId !== currentExpenseId;
 
-      if (expenseToEdit) {
-        // Edit Mode: Populate form with existing data
-        // Convert base amount to display currency
-        const isZeroDecimal = currencyConfig.code === 'JPY' || currencyConfig.code === 'VND';
-        const displayAmount = convertFromBase(expenseToEdit.amount, currencyConfig).toFixed(isZeroDecimal ? 0 : 2);
-        
-        startState = {
-          ...expenseToEdit,
-          amount: displayAmount,
-          paymentMethod: expenseToEdit.paymentMethod || 'Cash'
-        };
-      } else {
-        // Add Mode: Reset to default (merged with defaultValues)
-        startState = getInitialState();
-      }
+      if (shouldReset) {
+        let startState: ExpenseFormData;
 
-      // Pre-validate category to ensure initialState matches any potential auto-correction
-      const type = startState.type || TransactionType.EXPENSE;
-      const validCategories = getCategoriesByType(type);
-      const currentCategory = startState.category;
+        if (expenseToEdit) {
+          // Edit Mode: Populate form with existing data
+          // Convert base amount to display currency
+          const isZeroDecimal = currencyConfig.code === 'JPY' || currencyConfig.code === 'VND';
+          const displayAmount = convertFromBase(expenseToEdit.amount, currencyConfig).toFixed(isZeroDecimal ? 0 : 2);
 
-      // If category is invalid or empty but we have options, pick the first one
-      if (validCategories.length > 0) {
-        if (!currentCategory || !validCategories.includes(currentCategory)) {
-          startState.category = validCategories[0];
+          startState = {
+            ...expenseToEdit,
+            amount: displayAmount,
+            paymentMethod: expenseToEdit.paymentMethod || 'Cash'
+          };
+        } else {
+          // Add Mode: Reset to default (merged with defaultValues)
+          startState = getInitialState();
         }
-      }
 
-      setFormData(startState);
-      setInitialState(startState);
-      setShowSuccess(false);
-      setShowCalculator(false);
-      setCalcExpression('');
-      setShowConfirmClose(false);
+        // Pre-validate category to ensure initialState matches any potential auto-correction
+        const type = startState.type || TransactionType.EXPENSE;
+        const validCategories = getCategoriesByType(type);
+        const currentCategory = startState.category;
+
+        // If category is invalid or empty but we have options, pick the first one
+        if (validCategories.length > 0) {
+          if (!currentCategory || !validCategories.includes(currentCategory)) {
+            startState.category = validCategories[0];
+          }
+        }
+
+        setFormData(startState);
+        setInitialState(startState);
+        setShowCalculator(false);
+        setCalcExpression('');
+        setShowConfirmClose(false);
+        setLastExpenseId(currentExpenseId);
+      }
+    } else {
+      // Reset tracking when modal closes
+      setLastExpenseId(undefined);
     }
-  }, [isOpen, expenseToEdit, currencyConfig, categoryItems, defaultValues]); 
+  }, [isOpen, expenseToEdit?.id]);
 
   // When type changes, ensure category is valid for that type
   useEffect(() => {
     const currentCategory = formData.category;
     const type = formData.type || TransactionType.EXPENSE;
     const validCategories = getCategoriesByType(type);
-    
-    const needsCorrection = (currentCategory && !validCategories.includes(currentCategory) && validCategories.length > 0) || 
-                            (!currentCategory && validCategories.length > 0);
+
+    const needsCorrection = (currentCategory && !validCategories.includes(currentCategory) && validCategories.length > 0) ||
+      (!currentCategory && validCategories.length > 0);
 
     if (needsCorrection) {
       const newCategory = validCategories[0];
       setFormData(prev => ({ ...prev, category: newCategory }));
-      
+
       setInitialState(prev => {
-         if (prev.category === currentCategory) {
-             return { ...prev, category: newCategory };
-         }
-         return prev;
+        if (prev.category === currentCategory) {
+          return { ...prev, category: newCategory };
+        }
+        return prev;
       });
     }
   }, [formData.type, categoryItems, formData.category]);
@@ -145,43 +158,39 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   // Calculator Logic
   const handleCalcInput = (key: string) => {
     if (key === 'C') {
-        setCalcExpression('');
+      setCalcExpression('');
     } else if (key === 'backspace') {
-        setCalcExpression(prev => prev.slice(0, -1));
+      setCalcExpression(prev => prev.slice(0, -1));
     } else if (key === '=') {
-        const res = safeEvaluate(calcExpression);
-        if (res !== 'Error') {
-            setCalcExpression(res);
-            setFormData(prev => ({ ...prev, amount: res }));
-        } else {
-            setCalcExpression('Error');
-        }
+      const res = safeEvaluate(calcExpression);
+      if (res !== 'Error') {
+        setCalcExpression(res);
+        setFormData(prev => ({ ...prev, amount: res }));
+      } else {
+        setCalcExpression('Error');
+      }
     } else {
-        // If display shows Error, reset on new input
-        if (calcExpression === 'Error') {
-             setCalcExpression(key);
-        } else {
-             setCalcExpression(prev => prev + key);
-        }
+      // If display shows Error, reset on new input
+      if (calcExpression === 'Error') {
+        setCalcExpression(key);
+      } else {
+        setCalcExpression(prev => prev + key);
+      }
     }
   };
 
   if (!isOpen) return null;
 
   const handleClose = () => {
-    if (showSuccess) {
-        onClose();
-        return;
-    }
     // Check if form data has changed from initial state
-    const isDirty = formData.description !== initialState.description || 
-                    formData.amount !== initialState.amount ||
-                    formData.date !== initialState.date ||
-                    formData.category !== initialState.category ||
-                    formData.member !== initialState.member || 
-                    formData.recurrence !== initialState.recurrence ||
-                    formData.paymentMethod !== initialState.paymentMethod;
-    
+    const isDirty = formData.description !== initialState.description ||
+      formData.amount !== initialState.amount ||
+      formData.date !== initialState.date ||
+      formData.category !== initialState.category ||
+      formData.member !== initialState.member ||
+      formData.recurrence !== initialState.recurrence ||
+      formData.paymentMethod !== initialState.paymentMethod;
+
     if (isDirty) {
       setShowConfirmClose(true);
     } else {
@@ -191,37 +200,35 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     let currentAmount = formData.amount;
-    
+
     // If calculator is open, try to evaluate and save that result
     if (showCalculator) {
-        const res = safeEvaluate(calcExpression);
-        if (res === 'Error') {
-            alert("Invalid calculation");
-            return;
-        }
-        if (res !== '') {
-             currentAmount = res;
-        }
+      const res = safeEvaluate(calcExpression);
+      if (res === 'Error') {
+        alert("Invalid calculation");
+        return;
+      }
+      if (res !== '') {
+        currentAmount = res;
+      }
     }
 
-    const finalAmount = (currentAmount !== undefined && currentAmount !== '') 
-        ? parseFloat(currentAmount.toString()) 
-        : 0;
+    const finalAmount = (currentAmount !== undefined && currentAmount !== '')
+      ? parseFloat(currentAmount.toString())
+      : 0;
 
     const dataToSave: Partial<Expense> = {
-        ...formData,
-        amount: finalAmount
+      ...formData,
+      amount: finalAmount
     }
 
     onSave(dataToSave);
-    setShowSuccess(true);
-    setTimeout(() => {
-        onClose();
-    }, 2000);
+    // Close immediately without delay for better UX
+    onClose();
   };
-  
+
   // Currency formatting helpers
   const isZeroDecimal = currencyConfig.code === 'JPY' || currencyConfig.code === 'VND';
   const step = isZeroDecimal ? '1' : '0.01';
@@ -231,9 +238,9 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     if (formData.amount !== '' && formData.amount !== undefined) {
       const val = parseFloat(formData.amount.toString());
       if (!isNaN(val)) {
-        setFormData({ 
-          ...formData, 
-          amount: val.toFixed(isZeroDecimal ? 0 : 2) 
+        setFormData({
+          ...formData,
+          amount: val.toFixed(isZeroDecimal ? 0 : 2)
         });
       }
     }
@@ -242,20 +249,20 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   const isIncome = formData.type === TransactionType.INCOME;
   const isEditMode = !!expenseToEdit;
   const ThemeIcon = isIncome ? ArrowUpCircle : ArrowDownCircle;
-  
+
   const headerIconBg = isIncome ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600';
   const amountContainerClass = isIncome ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100';
   const amountLabelClass = isIncome ? 'text-green-700' : 'text-red-700';
   const amountSymbolClass = isIncome ? 'text-green-600' : 'text-red-600';
-  const amountInputClass = isIncome 
-    ? 'text-green-800 placeholder-green-300 border-green-200 focus:border-green-500' 
+  const amountInputClass = isIncome
+    ? 'text-green-800 placeholder-green-300 border-green-200 focus:border-green-500'
     : 'text-red-800 placeholder-red-300 border-red-200 focus:border-red-500';
   const saveButtonClass = isIncome ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700';
 
   // Calculator button styles
   const calcBtnBase = "p-2 rounded-lg text-lg font-bold shadow-sm transition-all active:scale-95 flex items-center justify-center";
   const calcBtnPrimary = "bg-white text-gray-800 hover:bg-gray-50 border border-gray-200";
-  const calcBtnSecondary = isIncome 
+  const calcBtnSecondary = isIncome
     ? "bg-green-100 text-green-700 hover:bg-green-200 border border-green-200"
     : "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200";
   const calcBtnAction = isIncome
@@ -264,8 +271,8 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
   // Prepare options for custom select
   const categoryOptions = availableCategories.map(cat => {
-      const item = categoryItems.find(c => c.name === cat);
-      return { value: cat, label: cat, color: item?.color };
+    const item = categoryItems.find(c => c.name === cat);
+    return { value: cat, label: cat, color: item?.color };
   });
 
   const memberOptions = members.map(m => ({ value: m, label: m }));
@@ -277,24 +284,6 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
   const paymentMethodOptions = PAYMENT_METHODS.map(p => ({ value: p, label: p }));
 
-  if (showSuccess) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
-          <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isIncome ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-            <CheckCircle size={40} />
-          </div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">
-            {isEditMode ? (isIncome ? 'Income Updated!' : 'Expense Updated!') : (isIncome ? 'Income Saved!' : 'Expense Saved!')}
-          </h3>
-          <p className="text-gray-500 text-sm">
-            Your transaction has been successfully recorded.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
@@ -304,12 +293,12 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
             <div className={`p-2 rounded-lg ${headerIconBg}`}>
               <ThemeIcon size={20} />
             </div>
-            {isEditMode 
+            {isEditMode
               ? (isIncome ? 'Edit Income' : 'Edit Expense')
               : (isIncome ? 'Add Income' : 'Add Expense')
             }
           </h2>
-          <button 
+          <button
             onClick={handleClose}
             className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1 rounded-full transition-colors"
           >
@@ -320,16 +309,15 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
         {/* Form */}
         <div className="p-6 overflow-y-auto custom-scrollbar">
           <form id="expense-form" onSubmit={handleSubmit} className="space-y-5">
-            
+
             {/* Type Switcher Segmented Control */}
             <div className="flex bg-gray-100 p-1 rounded-lg">
               <button
                 type="button"
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${
-                  !isIncome 
-                    ? 'bg-white text-red-600 shadow-sm ring-1 ring-black/5' 
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-                }`}
+                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${!isIncome
+                  ? 'bg-white text-red-600 shadow-sm ring-1 ring-black/5'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                  }`}
                 onClick={() => setFormData({ ...formData, type: TransactionType.EXPENSE })}
               >
                 <ArrowDownCircle size={16} />
@@ -337,11 +325,10 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               </button>
               <button
                 type="button"
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${
-                  isIncome 
-                    ? 'bg-white text-green-600 shadow-sm ring-1 ring-black/5' 
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-                }`}
+                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${isIncome
+                  ? 'bg-white text-green-600 shadow-sm ring-1 ring-black/5'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                  }`}
                 onClick={() => setFormData({ ...formData, type: TransactionType.INCOME })}
               >
                 <ArrowUpCircle size={16} />
@@ -352,69 +339,69 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
             {/* Amount Section with Calculator Toggle */}
             <div className={`p-4 rounded-xl border transition-colors duration-200 ${amountContainerClass}`}>
               <div className="flex justify-between items-center mb-1">
-                 <div className="w-4"></div> {/* Spacer */}
-                 <label className={`block text-xs font-semibold uppercase tracking-wide ${amountLabelClass}`}>
-                    Amount ({currencyConfig.code})
-                 </label>
-                 <button
-                    type="button"
-                    onClick={() => {
-                        if (!showCalculator) {
-                            // Convert current val to string for calc
-                            setCalcExpression(formData.amount ? String(formData.amount) : '');
-                        } else {
-                            // If switching back, try to apply valid result
-                            const res = safeEvaluate(calcExpression);
-                            if (res !== 'Error' && res !== '') {
-                                setFormData(prev => ({ ...prev, amount: res }));
-                            }
-                        }
-                        setShowCalculator(!showCalculator);
-                    }}
-                    className={`p-1.5 rounded-lg hover:bg-black/5 transition-colors ${isIncome ? 'text-green-700' : 'text-red-700'}`}
-                    title={showCalculator ? "Switch to Input" : "Open Calculator"}
-                 >
-                    {showCalculator ? <FileText size={18} /> : <Calculator size={18} />}
-                 </button>
+                <div className="w-4"></div> {/* Spacer */}
+                <label className={`block text-xs font-semibold uppercase tracking-wide ${amountLabelClass}`}>
+                  Amount ({currencyConfig.code})
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!showCalculator) {
+                      // Convert current val to string for calc
+                      setCalcExpression(formData.amount ? String(formData.amount) : '');
+                    } else {
+                      // If switching back, try to apply valid result
+                      const res = safeEvaluate(calcExpression);
+                      if (res !== 'Error' && res !== '') {
+                        setFormData(prev => ({ ...prev, amount: res }));
+                      }
+                    }
+                    setShowCalculator(!showCalculator);
+                  }}
+                  className={`p-1.5 rounded-lg hover:bg-black/5 transition-colors ${isIncome ? 'text-green-700' : 'text-red-700'}`}
+                  title={showCalculator ? "Switch to Input" : "Open Calculator"}
+                >
+                  {showCalculator ? <FileText size={18} /> : <Calculator size={18} />}
+                </button>
               </div>
 
               {showCalculator ? (
-                  <div className="animate-in fade-in slide-in-from-top-2">
-                      {/* Calc Display */}
-                      <div className={`w-full bg-white/60 p-3 rounded-lg text-right text-2xl font-mono font-bold tracking-wider mb-3 overflow-x-auto whitespace-nowrap border ${isIncome ? 'border-green-200 text-green-900' : 'border-red-200 text-red-900'}`}>
-                          {calcExpression || '0'}
-                      </div>
-                      
-                      {/* Calc Grid */}
-                      <div className="grid grid-cols-4 gap-2 select-none">
-                          <button type="button" onClick={() => handleCalcInput('C')} className={calcBtnSecondary}>C</button>
-                          <button type="button" onClick={() => handleCalcInput('/')} className={calcBtnSecondary}>/</button>
-                          <button type="button" onClick={() => handleCalcInput('*')} className={calcBtnSecondary}>*</button>
-                          <button type="button" onClick={() => handleCalcInput('backspace')} className={calcBtnSecondary}><Delete size={20} /></button>
-
-                          <button type="button" onClick={() => handleCalcInput('7')} className={calcBtnPrimary}>7</button>
-                          <button type="button" onClick={() => handleCalcInput('8')} className={calcBtnPrimary}>8</button>
-                          <button type="button" onClick={() => handleCalcInput('9')} className={calcBtnPrimary}>9</button>
-                          <button type="button" onClick={() => handleCalcInput('-')} className={calcBtnSecondary}>-</button>
-
-                          <button type="button" onClick={() => handleCalcInput('4')} className={calcBtnPrimary}>4</button>
-                          <button type="button" onClick={() => handleCalcInput('5')} className={calcBtnPrimary}>5</button>
-                          <button type="button" onClick={() => handleCalcInput('6')} className={calcBtnPrimary}>6</button>
-                          <button type="button" onClick={() => handleCalcInput('+')} className={calcBtnSecondary}>+</button>
-
-                          <button type="button" onClick={() => handleCalcInput('1')} className={calcBtnPrimary}>1</button>
-                          <button type="button" onClick={() => handleCalcInput('2')} className={calcBtnPrimary}>2</button>
-                          <button type="button" onClick={() => handleCalcInput('3')} className={calcBtnPrimary}>3</button>
-                          <button type="button" onClick={() => handleCalcInput('=')} className={`${calcBtnAction} row-span-2`}>=</button>
-
-                          <button type="button" onClick={() => handleCalcInput('0')} className={`${calcBtnPrimary} col-span-2`}>0</button>
-                          <button type="button" onClick={() => handleCalcInput('.')} className={calcBtnPrimary}>.</button>
-                      </div>
+                <div className="animate-in fade-in slide-in-from-top-2">
+                  {/* Calc Display */}
+                  <div className={`w-full bg-white/60 p-3 rounded-lg text-right text-2xl font-mono font-bold tracking-wider mb-3 overflow-x-auto whitespace-nowrap border ${isIncome ? 'border-green-200 text-green-900' : 'border-red-200 text-red-900'}`}>
+                    {calcExpression || '0'}
                   </div>
+
+                  {/* Calc Grid */}
+                  <div className="grid grid-cols-4 gap-2 select-none">
+                    <button type="button" onClick={() => handleCalcInput('C')} className={calcBtnSecondary}>C</button>
+                    <button type="button" onClick={() => handleCalcInput('/')} className={calcBtnSecondary}>/</button>
+                    <button type="button" onClick={() => handleCalcInput('*')} className={calcBtnSecondary}>*</button>
+                    <button type="button" onClick={() => handleCalcInput('backspace')} className={calcBtnSecondary}><Delete size={20} /></button>
+
+                    <button type="button" onClick={() => handleCalcInput('7')} className={calcBtnPrimary}>7</button>
+                    <button type="button" onClick={() => handleCalcInput('8')} className={calcBtnPrimary}>8</button>
+                    <button type="button" onClick={() => handleCalcInput('9')} className={calcBtnPrimary}>9</button>
+                    <button type="button" onClick={() => handleCalcInput('-')} className={calcBtnSecondary}>-</button>
+
+                    <button type="button" onClick={() => handleCalcInput('4')} className={calcBtnPrimary}>4</button>
+                    <button type="button" onClick={() => handleCalcInput('5')} className={calcBtnPrimary}>5</button>
+                    <button type="button" onClick={() => handleCalcInput('6')} className={calcBtnPrimary}>6</button>
+                    <button type="button" onClick={() => handleCalcInput('+')} className={calcBtnSecondary}>+</button>
+
+                    <button type="button" onClick={() => handleCalcInput('1')} className={calcBtnPrimary}>1</button>
+                    <button type="button" onClick={() => handleCalcInput('2')} className={calcBtnPrimary}>2</button>
+                    <button type="button" onClick={() => handleCalcInput('3')} className={calcBtnPrimary}>3</button>
+                    <button type="button" onClick={() => handleCalcInput('=')} className={`${calcBtnAction} row-span-2`}>=</button>
+
+                    <button type="button" onClick={() => handleCalcInput('0')} className={`${calcBtnPrimary} col-span-2`}>0</button>
+                    <button type="button" onClick={() => handleCalcInput('.')} className={calcBtnPrimary}>.</button>
+                  </div>
+                </div>
               ) : (
                 <div className="relative flex items-center justify-center text-center">
-                    <span className={`text-3xl font-bold mr-2 ${amountSymbolClass}`}>{currencyConfig.symbol}</span>
-                    <input
+                  <span className={`text-3xl font-bold mr-2 ${amountSymbolClass}`}>{currencyConfig.symbol}</span>
+                  <input
                     type="number"
                     step={step}
                     required={!showCalculator}
@@ -422,12 +409,12 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                     className={`bg-transparent text-4xl font-bold w-48 text-center border-b-2 outline-none transition-colors ${amountInputClass}`}
                     value={formData.amount}
                     onChange={e => {
-                        const val = e.target.value;
-                        setFormData({ ...formData, amount: val === '' ? '' : val })
+                      const val = e.target.value;
+                      setFormData({ ...formData, amount: val === '' ? '' : val })
                     }}
                     onBlur={handleAmountBlur}
                     autoFocus
-                    />
+                  />
                 </div>
               )}
             </div>
@@ -454,7 +441,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Date
                 </label>
-                <DatePicker 
+                <DatePicker
                   value={formData.date}
                   onChange={(date) => setFormData({ ...formData, date })}
                   className="bg-white"
@@ -501,28 +488,28 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                   Member
                 </label>
                 <CustomSelect
-                   value={formData.member || ''}
-                   onChange={(val) => setFormData({ ...formData, member: val })}
-                   options={memberOptions}
-                   placeholder="Select Member"
-                   className="bg-white"
+                  value={formData.member || ''}
+                  onChange={(val) => setFormData({ ...formData, member: val })}
+                  options={memberOptions}
+                  placeholder="Select Member"
+                  className="bg-white"
                 />
               </div>
             </div>
-            
+
             {/* Recurrence (Optional Row) */}
             <div>
-               <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                  <RotateCw size={16} className="text-gray-400" />
-                  Repeat (Optional)
-                </label>
-                <CustomSelect
-                  value={formData.recurrence || ''}
-                  onChange={(val) => setFormData({ ...formData, recurrence: val ? val as RecurrenceFrequency : undefined })}
-                  options={recurrenceOptions}
-                  placeholder="Frequency"
-                  className="bg-white"
-                />
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                <RotateCw size={16} className="text-gray-400" />
+                Repeat (Optional)
+              </label>
+              <CustomSelect
+                value={formData.recurrence || ''}
+                onChange={(val) => setFormData({ ...formData, recurrence: val ? val as RecurrenceFrequency : undefined })}
+                options={recurrenceOptions}
+                placeholder="Frequency"
+                className="bg-white"
+              />
             </div>
           </form>
         </div>
@@ -550,33 +537,33 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       {/* Custom Confirmation Dialog */}
       {showConfirmClose && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-[2px] p-4 animate-fade-in">
-           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 transform scale-100 animate-in zoom-in-95 duration-200 border border-gray-100">
-             <div className="flex flex-col items-center text-center">
-               <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mb-4 text-amber-600">
-                 <AlertTriangle size={24} />
-               </div>
-               <h3 className="text-lg font-bold text-gray-900 mb-2">Discard Changes?</h3>
-               <p className="text-sm text-gray-500 mb-6">
-                 You have unsaved changes. Are you sure you want to discard them?
-               </p>
-               <div className="flex gap-3 w-full">
-                 <button
-                   type="button"
-                   onClick={() => setShowConfirmClose(false)}
-                   className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
-                 >
-                   Keep Editing
-                 </button>
-                 <button
-                   type="button"
-                   onClick={() => { setShowConfirmClose(false); onClose(); }}
-                   className="flex-1 px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 shadow-sm transition-colors"
-                 >
-                   Discard
-                 </button>
-               </div>
-             </div>
-           </div>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 transform scale-100 animate-in zoom-in-95 duration-200 border border-gray-100">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mb-4 text-amber-600">
+                <AlertTriangle size={24} />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Discard Changes?</h3>
+              <p className="text-sm text-gray-500 mb-6">
+                You have unsaved changes. Are you sure you want to discard them?
+              </p>
+              <div className="flex gap-3 w-full">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmClose(false)}
+                  className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Keep Editing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowConfirmClose(false); onClose(); }}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 shadow-sm transition-colors"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,0 +1,366 @@
+{
+  "app": {
+    "name": "FamilyFinance",
+    "loading": "Loading..."
+  },
+  "navigation": {
+    "home": "Home",
+    "dashboard": "Dashboard",
+    "transactions": "Transactions",
+    "goals": "Goals & Wallets",
+    "help": "Help & Tutorials",
+    "feedback": "Feedback / Issues",
+    "settings": "Settings"
+  },
+  "header": {
+    "walletOverview": "Wallet Overview",
+    "financialGoals": "Financial Goals",
+    "currency": "Currency",
+    "selectCurrency": "Select Currency",
+    "connect": "Connect",
+    "reconnect": "Reconnect",
+    "signOut": "Sign Out",
+    "guestUser": "Guest User",
+    "signInToSync": "Sign in to sync data"
+  },
+  "sync": {
+    "saving": "Saving...",
+    "syncing": "Syncing...",
+    "syncError": "Sync Error",
+    "live": "Live",
+    "refreshData": "Refresh Data",
+    "refreshing": "Refreshing...",
+    "autoSaving": "Auto-saving...",
+    "synced": "Synced",
+    "syncPaused": "Sync Paused:",
+    "sessionExpired": "Session expired or needs verification.",
+    "localStorageMode": "Local Storage Mode:",
+    "dataSavedLocally": "Data is saved only on this browser.",
+    "reconnectNow": "Reconnect Now",
+    "connectCloud": "Connect Cloud"
+  },
+  "landing": {
+    "title": "Family Finance Manager",
+    "subtitle": "Track expenses, manage budgets, and achieve your financial goals together",
+    "getStarted": "Get Started",
+    "features": {
+      "title": "Why Choose FamilyFinance?",
+      "tracking": {
+        "title": "Smart Expense Tracking",
+        "description": "Log and categorize all your family expenses in one place"
+      },
+      "budgets": {
+        "title": "Budget Management",
+        "description": "Set budgets by category and track spending in real-time"
+      },
+      "goals": {
+        "title": "Savings Goals",
+        "description": "Define financial goals and monitor your progress"
+      },
+      "sync": {
+        "title": "Cloud Sync",
+        "description": "Sync data across devices using Google Sheets"
+      },
+      "insights": {
+        "title": "Visual Insights",
+        "description": "Beautiful charts and analytics to understand your spending"
+      },
+      "family": {
+        "title": "Family Collaboration",
+        "description": "Track expenses by family member and share access"
+      }
+    }
+  },
+  "setup": {
+    "welcome": "Welcome to FamilyFinance",
+    "letsSetup": "Let's set up your account",
+    "step": "Step",
+    "of": "of",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish Setup",
+    "skipDemo": "Skip & Use Demo Data",
+    "currency": {
+      "title": "Choose Your Currency",
+      "description": "Select your primary currency for transactions",
+      "label": "Currency"
+    },
+    "wallets": {
+      "title": "Set Up Your Wallets",
+      "description": "Create wallets to organize your money",
+      "addWallet": "Add Wallet",
+      "walletName": "Wallet Name",
+      "walletType": "Wallet Type",
+      "initialBalance": "Initial Balance",
+      "types": {
+        "main": "Main Wallet",
+        "savings": "Savings",
+        "investment": "Investment",
+        "cash": "Cash"
+      }
+    },
+    "categories": {
+      "title": "Customize Categories",
+      "description": "Add or modify expense and income categories",
+      "income": "Income Categories",
+      "expense": "Expense Categories"
+    },
+    "members": {
+      "title": "Add Family Members",
+      "description": "Who will be using this app?",
+      "addMember": "Add Member",
+      "memberName": "Member Name"
+    },
+    "sync": {
+      "title": "Cloud Sync (Optional)",
+      "description": "Connect to Google Sheets for cloud backup and sync",
+      "enableSync": "Enable Google Sheets Sync",
+      "skipForNow": "Skip for now",
+      "managedService": "Use Managed Service",
+      "customConfig": "Use Custom Configuration",
+      "spreadsheetId": "Spreadsheet ID",
+      "clientId": "Google Client ID",
+      "apiKey": "Google API Key",
+      "connect": "Connect Now",
+      "testConnection": "Test Connection",
+      "importConfig": "Import Config"
+    }
+  },
+  "settings": {
+    "title": "App Settings",
+    "currency": {
+      "title": "Currency Preference",
+      "displayCurrency": "Display Currency",
+      "description": "Select the primary currency symbol for your transactions."
+    },
+    "lists": {
+      "title": "Lists Management",
+      "description": "Manage category lists separately for Income and Expenses.",
+      "synced": "These will be synced to your Google Sheet.",
+      "incomeCategories": "Income Categories",
+      "expenseCategories": "Expense Categories",
+      "familyMembers": "Family Members",
+      "noCategories": "No categories defined.",
+      "noMembers": "No members defined.",
+      "selectOrType": "Select or Type...",
+      "newExpense": "New Expense...",
+      "newMember": "New Member...",
+      "changeColor": "Change Color",
+      "pickColor": "Pick Color",
+      "editName": "Edit Name",
+      "finishEditing": "Finish Editing",
+      "deleteCategory": "Delete Category",
+      "deleteMember": "Delete Member",
+      "clickAgainToConfirm": "Click again to confirm deletion",
+      "memberExists": "Member already exists",
+      "nameCannotBeEmpty": "Name cannot be empty"
+    },
+    "googleSheets": {
+      "title": "Google Sheets Integration",
+      "description": "Sync your data with Google Sheets for backup and collaboration.",
+      "connectedAs": "Connected as",
+      "notConnected": "Not connected",
+      "managedService": "Managed Service",
+      "customConfig": "Custom Configuration",
+      "managedServiceDesc": "Use pre-configured credentials (recommended for most users)",
+      "customConfigDesc": "Provide your own Google API credentials",
+      "spreadsheetId": "Spreadsheet ID",
+      "spreadsheetIdPlaceholder": "Enter your Google Spreadsheet ID",
+      "clientId": "Google Client ID",
+      "clientIdPlaceholder": "Your Google OAuth Client ID",
+      "apiKey": "Google API Key",
+      "apiKeyPlaceholder": "Your Google API Key",
+      "helpSetup": "Need help setting up?",
+      "viewGuide": "View Setup Guide",
+      "shareConfig": "Share Config Link",
+      "exportConfig": "Export Config",
+      "importConfig": "Import Config",
+      "downloadTemplate": "Download Template",
+      "disconnect": "Disconnect",
+      "saveAndConnect": "Save & Connect"
+    },
+    "dangerZone": {
+      "title": "Danger Zone",
+      "resetData": "Reset to Demo Data",
+      "resetDataDesc": "Replace all data with sample demo data. This will disconnect Google Sync.",
+      "resetDataConfirm": "Click again to confirm reset",
+      "clearData": "Clear All Data",
+      "clearDataDesc": "Delete all transactions, goals, and budgets. This will disconnect Google Sync.",
+      "clearDataConfirm": "Click again to confirm clear"
+    }
+  },
+  "home": {
+    "quickAdd": "Quick Add",
+    "todayTransactions": "Today's Transactions",
+    "noTransactions": "No transactions today",
+    "addIncome": "Add Income",
+    "addExpense": "Add Expense",
+    "amount": "Amount",
+    "description": "Description",
+    "category": "Category",
+    "member": "Member",
+    "wallet": "Wallet",
+    "add": "Add"
+  },
+  "dashboard": {
+    "totalBalance": "Total Balance",
+    "thisMonth": "This Month",
+    "income": "Income",
+    "expenses": "Expenses",
+    "netSavings": "Net Savings",
+    "spendingByCategory": "Spending by Category",
+    "spendingByMember": "Spending by Member",
+    "monthlyTrend": "Monthly Trend",
+    "budgetOverview": "Budget Overview",
+    "noBudgets": "No budgets set",
+    "addBudget": "Add Budget",
+    "spent": "Spent",
+    "remaining": "Remaining",
+    "exceeded": "Exceeded"
+  },
+  "transactions": {
+    "title": "Transactions",
+    "addTransaction": "Add Transaction",
+    "addRecurring": "Add Recurring",
+    "filters": "Filters",
+    "search": "Search transactions...",
+    "all": "All",
+    "type": "Type",
+    "dateRange": "Date Range",
+    "from": "From",
+    "to": "To",
+    "export": "Export",
+    "noTransactions": "No transactions found",
+    "date": "Date",
+    "description": "Description",
+    "category": "Category",
+    "member": "Member",
+    "amount": "Amount",
+    "actions": "Actions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "recurring": "Recurring",
+    "transfer": "Transfer"
+  },
+  "goals": {
+    "title": "Financial Goals",
+    "savingsGoals": "Savings Goals",
+    "wallets": "Wallets & Accounts",
+    "addGoal": "Add Goal",
+    "addWallet": "Add Wallet",
+    "transfer": "Transfer",
+    "noGoals": "No savings goals yet",
+    "noWallets": "No wallets configured",
+    "goalName": "Goal Name",
+    "targetAmount": "Target Amount",
+    "currentAmount": "Current Amount",
+    "deadline": "Deadline",
+    "progress": "Progress",
+    "completed": "Completed",
+    "walletName": "Wallet Name",
+    "walletType": "Wallet Type",
+    "balance": "Balance",
+    "initialBalance": "Initial Balance"
+  },
+  "modal": {
+    "close": "Close",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add"
+  },
+  "dialog": {
+    "confirmSignOut": "Confirm Sign Out",
+    "signOutMessage": "Are you sure you want to sign out?\n\nAll your data will be synced to Google Sheets and then cleared from this device. You will be redirected to the landing page.",
+    "confirmDisconnect": "Confirm Sign Out",
+    "disconnectMessage": "Are you sure you want to disconnect from Google Sheets?\n\nYour data will remain in local storage, but live sync will stop until you reconnect.",
+    "connectionFailed": "Connection Failed",
+    "linkCopied": "Link Copied!",
+    "configLinkCopied": "Configuration link copied to clipboard!\n\nSend this link to family members. When they open it, the app will automatically configure the data source.",
+    "missingConfiguration": "Missing Configuration",
+    "fillConfigFields": "Please fill in and save the configuration fields first.",
+    "missingSpreadsheetId": "Missing Spreadsheet ID",
+    "enterSpreadsheetId": "Please enter your Spreadsheet ID first.",
+    "managedServiceImported": "Managed Service Config Imported",
+    "managedServiceImportedMsg": "Spreadsheet ID imported successfully!\n\nThis configuration uses Managed Service credentials. Make sure your environment variables (VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY) are set.\n\nClick \"Save & Connect\" to apply.",
+    "importSuccessful": "Import Successful",
+    "importSuccessfulMsg": "Configuration imported successfully!\n\nClick 'Save & Connect' to apply.",
+    "credentialsImported": "Credentials imported!\n\nPlease enter your Spreadsheet ID manually, then click 'Save & Connect'.",
+    "importFailed": "Import Failed",
+    "importFailedMsg": "Failed to parse configuration file. Please provide a valid JSON config or .env file.",
+    "invalidConfig": "Invalid Config",
+    "missingCredentials": "Configuration is missing required credentials (Client ID or API Key).",
+    "error": "Error",
+    "generateLinkFailed": "Failed to generate link.",
+    "success": "Success",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "help": {
+    "title": "Help & Tutorials",
+    "gettingStarted": "Getting Started",
+    "googleSheets": "Google Sheets Setup",
+    "features": "Features",
+    "faq": "FAQ"
+  },
+  "feedback": {
+    "title": "Feedback / Issues",
+    "description": "We'd love to hear from you! Report bugs, request features, or share your thoughts.",
+    "submit": "Submit Feedback"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "close": "Close",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish",
+    "skip": "Skip",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "import": "Import",
+    "download": "Download",
+    "upload": "Upload",
+    "share": "Share",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "required": "Required",
+    "optional": "Optional",
+    "all": "All",
+    "none": "None",
+    "other": "Other"
+  },
+  "transactionTypes": {
+    "income": "Income",
+    "expense": "Expense",
+    "transfer": "Transfer"
+  },
+  "recurrence": {
+    "none": "None",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "yearly": "Yearly"
+  },
+  "errors": {
+    "required": "This field is required",
+    "invalidAmount": "Please enter a valid amount",
+    "invalidDate": "Please enter a valid date",
+    "connectionFailed": "Connection failed. Please check your internet connection.",
+    "authenticationFailed": "Authentication failed. Please try again.",
+    "permissionDenied": "Permission denied. Please check your access rights.",
+    "notFound": "Resource not found.",
+    "unknownError": "An unknown error occurred. Please try again."
+  }
+}

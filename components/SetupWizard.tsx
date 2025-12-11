@@ -7,7 +7,7 @@ import {
 import { CurrencyCode, MemberItem, GoogleConfig, TransactionType, Wallet as WalletType, SavingsGoal, Expense, CategoryItem, Budget } from '../types';
 import { AVAILABLE_CURRENCIES, CURRENCY_SYMBOLS, DEFAULT_MEMBER_ITEMS, DEFAULT_CATEGORY_ITEMS, CURRENCY_RATES } from '../constants';
 import { CustomSelect } from './CustomSelect';
-import { saveGoogleConfig, saveCurrencyCode, saveMembers, saveWallets, saveExpenses, saveGoals, setSetupComplete, saveCategories, saveBudgets } from '../services/storageService';
+import { saveGoogleConfig, saveCurrencyCode, saveMembers, saveWallets, saveExpenses, saveGoals, setSetupComplete, saveCategories, saveBudgets, saveGoogleSyncEnabled } from '../services/storageService';
 import { convertToBase, calculateWalletBalances, formatCurrency } from '../utils';
 import { initializeGapiClient, handleAuthClick, fetchExpensesFromSheet, fetchRefData, saveRefData, saveExpensesToSheet, saveGoalsToSheet, saveBudgetsToSheet } from '../services/googleSheetsService';
 import { Dialog } from './Dialog';
@@ -15,6 +15,7 @@ import { Dialog } from './Dialog';
 interface SetupWizardProps {
   onComplete: () => void;
   onSkip: () => void;
+  onBack?: () => void;
 }
 
 const STEPS = [
@@ -33,7 +34,7 @@ const TIPS = [
   { title: "Initial Boost", text: "Setting accurate starting balances ensures your Net Worth calculation is correct from Day 1." }
 ];
 
-export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) => {
+export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip, onBack }) => {
   const [currentStep, setCurrentStep] = useState(0);
 
   // State for Wizard
@@ -43,7 +44,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
 
   const [configType, setConfigType] = useState<'LOCAL' | 'IMPORT' | 'MANUAL'>('LOCAL');
   const [importString, setImportString] = useState('');
-  const [manualConfig, setManualConfig] = useState<GoogleConfig>({ clientId: '', apiKey: '', spreadsheetId: '' });
+  const [manualConfig, setManualConfig] = useState<GoogleConfig>({
+    clientId: '',
+    apiKey: '',
+    spreadsheetId: ''
+  });
+
+  const [useServiceCreds, setUseServiceCreds] = useState<boolean>(!!(import.meta.env.VITE_GOOGLE_CLIENT_ID && import.meta.env.VITE_GOOGLE_API_KEY));
 
   // Google Sync State
   const [isConnecting, setIsConnecting] = useState(false);
@@ -83,7 +90,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
   const addMember = () => {
     if (newMemberName.trim()) {
       if (members.some(m => m.name.toLowerCase() === newMemberName.trim().toLowerCase())) {
-        alert('Member already exists');
+        setDialogState({
+          isOpen: true,
+          title: 'Duplicate Member',
+          message: 'A member with this name already exists. Please use a different name.',
+          type: 'warning'
+        });
         return;
       }
       setMembers([...members, {
@@ -113,8 +125,59 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
   };
 
   const handleConnect = async () => {
-    if (!manualConfig.clientId || !manualConfig.apiKey || !manualConfig.spreadsheetId) {
-      alert("Please fill in all Google Cloud fields.");
+    let configToUse = { ...manualConfig };
+
+    if (useServiceCreds) {
+      const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      const envApiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+
+      // console.log("[Setup] Check Env Vars:", { hasClientId: !!envClientId, hasApiKey: !!envApiKey });
+
+      if (!envApiKey) {
+        setDialogState({
+          isOpen: true,
+          title: 'Configuration Error',
+          message: 'VITE_GOOGLE_API_KEY is missing.\n\nIf you just added the .env file, please restart the development server.',
+          type: 'error'
+        });
+        return;
+      }
+
+      configToUse.clientId = envClientId;
+      configToUse.apiKey = envApiKey;
+    }
+
+    // Trim all values before validation
+    configToUse.clientId = configToUse.clientId.trim();
+    configToUse.apiKey = configToUse.apiKey.trim();
+    configToUse.spreadsheetId = configToUse.spreadsheetId.trim();
+
+    // Heuristic Check: API Key vs Spreadsheet ID confusion
+    // API Keys usually start with AIza. Spreadsheet IDs start with 1 (and are long)
+    if (configToUse.apiKey.startsWith('1') && configToUse.apiKey.length > 30) {
+      const source = useServiceCreds ? "ENVIRONMENT VARIABLE (VITE_GOOGLE_API_KEY)" : "Input Field";
+
+      setDialogState({
+        isOpen: true,
+        title: 'Invalid API Key',
+        message: `The API Key loaded from ${source} looks like a Spreadsheet ID (starts with '1').\n\nPlease check your .env file or configuration.`,
+        type: 'error'
+      });
+      console.error("Suspicious API Key (looks like ID):", configToUse.apiKey);
+      return;
+    }
+
+    if (!configToUse.apiKey.startsWith('AIza')) {
+      console.warn(`Warning: API Key from ${useServiceCreds ? "Env Var" : "Input"} does not start with 'AIza'. This might be incorrect.`);
+    }
+
+    if (!configToUse.clientId || !configToUse.apiKey || !configToUse.spreadsheetId) {
+      setDialogState({
+        isOpen: true,
+        title: 'Missing Configuration',
+        message: 'Please fill in all Google Cloud fields (or check environment configuration).',
+        type: 'warning'
+      });
       return;
     }
 
@@ -123,11 +186,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
     setConnectionMessage('');
 
     try {
-      await initializeGapiClient(manualConfig);
+      await initializeGapiClient(configToUse);
       await handleAuthClick();
 
-      const { expenses, wallets } = await fetchExpensesFromSheet(manualConfig.spreadsheetId);
-      const refData = await fetchRefData(manualConfig.spreadsheetId);
+      const { expenses, wallets } = await fetchExpensesFromSheet(configToUse.spreadsheetId);
+      const refData = await fetchRefData(configToUse.spreadsheetId);
 
       setFetchedData({
         expenses,
@@ -147,9 +210,20 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
       setConnectionMessage(`Success! Found ${expenses.length} txns.`);
 
     } catch (error: any) {
+      console.error("Connection failed. Config used:", { ...configToUse, apiKey: '***' });
       console.error(error);
       setConnectionStatus('error');
-      setConnectionMessage(error.message || "Connection failed. Check console.");
+
+      let msg = "Connection failed.";
+      if (error.result && error.result.error && error.result.error.message) {
+        msg += " " + error.result.error.message;
+      } else if (error.message) {
+        msg += " " + error.message;
+      } else if (typeof error === 'string') {
+        msg += " " + error;
+      }
+
+      setConnectionMessage(msg);
     } finally {
       setIsConnecting(false);
     }
@@ -183,7 +257,19 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
         console.error("Invalid config string");
       }
     } else if (configType === 'MANUAL') {
-      saveGoogleConfig(manualConfig);
+      let configToSave = { ...manualConfig };
+
+      if (useServiceCreds) {
+        configToSave.clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+        configToSave.apiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
+      }
+
+      saveGoogleConfig(configToSave);
+
+      // If user successfully connected during setup, mark sync as enabled
+      if (connectionStatus === 'success') {
+        saveGoogleSyncEnabled(true);
+      }
 
       // Save members from state (allows for edits during wizard)
       saveMembers(members);
@@ -205,7 +291,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
         saveExpenses(fetchedData.expenses);
 
         // Sync updated members back to sheet
-        await saveRefData(manualConfig.spreadsheetId, fetchedData.categories || DEFAULT_CATEGORY_ITEMS, members);
+        await saveRefData(configToSave.spreadsheetId, fetchedData.categories || DEFAULT_CATEGORY_ITEMS, members);
 
       } else {
         // MANUAL but NO data found -> Treat as new setup and push to sheet
@@ -256,8 +342,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
         saveGoals([]);
 
         // Push to Sheet
-        await saveExpensesToSheet(manualConfig.spreadsheetId, initialExpenses, allWallets);
-        await saveRefData(manualConfig.spreadsheetId, DEFAULT_CATEGORY_ITEMS, members);
+        await saveExpensesToSheet(configToSave.spreadsheetId, initialExpenses, allWallets);
+        await saveRefData(configToSave.spreadsheetId, DEFAULT_CATEGORY_ITEMS, members);
       }
 
     } else {
@@ -318,10 +404,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
 
   const renderWelcomeStep = () => (
     <div className="flex flex-col items-center text-center justify-center h-full max-w-lg mx-auto animate-fade-in">
-      <div className="w-20 h-20 bg-green-100 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-green-100 rotate-3 transition-transform hover:rotate-6">
-        <Wallet className="text-green-600" size={40} />
+      <div className="mb-6">
+        <img src="/images/simple_famfin.png" alt="SimpleFamFin Logo" className="h-24 w-auto object-contain" />
       </div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-3 tracking-tight">FamilyFinance</h1>
       <p className="text-gray-600 mb-8 text-lg leading-relaxed">
         Master your household budget with privacy-focused tracking and powerful insights.
         <br /><span className="text-sm text-gray-400 mt-2 block">Takes about 2 minutes to set up.</span>
@@ -494,42 +579,119 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
               <input
                 type="file"
                 className="hidden"
-                accept=".json"
+                accept=".json,.env,.txt"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
                     const reader = new FileReader();
                     reader.onload = (event) => {
-                      try {
-                        const json = JSON.parse(event.target?.result as string);
-                        const configData = json.config || json;
+                      const content = event.target?.result as string;
+                      let newConfig: Partial<GoogleConfig> = {};
 
-                        if (configData.clientId && configData.apiKey && configData.spreadsheetId) {
-                          setManualConfig({
-                            clientId: configData.clientId,
-                            apiKey: configData.apiKey,
-                            spreadsheetId: configData.spreadsheetId
+                      try {
+                        // Try parsing as JSON first
+                        try {
+                          const json = JSON.parse(content);
+                          const configData = json.config || json;
+
+                          // Check if this is a Managed Service export
+                          const isManagedService = json.isManagedService === true ||
+                            (typeof configData.note === 'string' && configData.note.includes('Managed Service'));
+
+                          if (isManagedService) {
+                            // Managed Service config - only has Spreadsheet ID
+                            if (configData.spreadsheetId) {
+                              setManualConfig(prev => ({
+                                ...prev,
+                                spreadsheetId: configData.spreadsheetId
+                              }));
+                              setConfigType('MANUAL');
+                              setDialogState({
+                                isOpen: true,
+                                title: 'Managed Service Config Imported',
+                                message: 'Spreadsheet ID imported successfully!\n\nThis configuration uses Managed Service credentials.\n\nClick "Managed Service" and connect.',
+                                type: 'success'
+                              });
+                            } else {
+                              throw new Error("Missing Spreadsheet ID");
+                            }
+                          } else {
+                            // Custom Config - has all credentials
+                            newConfig = {
+                              clientId: configData.clientId,
+                              apiKey: configData.apiKey,
+                              spreadsheetId: configData.spreadsheetId
+                            };
+
+                            if (newConfig.clientId && newConfig.apiKey) {
+                              setManualConfig(prev => ({
+                                ...prev,
+                                clientId: newConfig.clientId || prev.clientId,
+                                apiKey: newConfig.apiKey || prev.apiKey,
+                                spreadsheetId: newConfig.spreadsheetId || prev.spreadsheetId
+                              }));
+                              setConfigType('MANUAL');
+
+                              if (!newConfig.spreadsheetId) {
+                                setDialogState({
+                                  isOpen: true,
+                                  title: 'Credentials Imported',
+                                  message: 'Client ID and API Key imported successfully! Please manually enter your Spreadsheet ID to continue.',
+                                  type: 'success'
+                                });
+                              }
+                            } else {
+                              setDialogState({
+                                isOpen: true,
+                                title: 'Invalid Configuration',
+                                message: 'File is missing required credentials (Client ID or API Key).',
+                                type: 'error'
+                              });
+                            }
+                          }
+                        } catch (jsonErr) {
+                          // Try .env parsing
+                          const lines = content.split('\n');
+                          const envConfig: any = {};
+
+                          lines.forEach(line => {
+                            const match = line.match(/^\s*(?:export\s+)?(?:VITE_)?([A-Z0-9_]+)\s*=\s*(.*?)(\s*#.*)?$/);
+                            if (match) {
+                              const key = match[1];
+                              let value = match[2].trim();
+                              if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                                value = value.slice(1, -1);
+                              }
+
+                              if (key === 'GOOGLE_CLIENT_ID') envConfig.clientId = value;
+                              else if (key === 'GOOGLE_API_KEY') envConfig.apiKey = value;
+                              // Do not parse spreadsheet ID
+                            }
                           });
-                          // Auto-trigger connection check after valid import
-                          setTimeout(() => {
+
+                          if (Object.keys(envConfig).length > 0) {
+                            newConfig = envConfig;
+                            setManualConfig(prev => ({
+                              ...prev,
+                              clientId: newConfig.clientId || prev.clientId,
+                              apiKey: newConfig.apiKey || prev.apiKey
+                            }));
                             setConfigType('MANUAL');
-                            // We need to call handleConnect but handleConnect uses closure state manualConfig
-                            // which won't be updated yet. So we can't auto-connect easily here without useEffect
-                            // Just switching to MANUAL view with pre-filled state is good UX.
-                          }, 500);
-                        } else {
-                          setDialogState({
-                            isOpen: true,
-                            title: 'Invalid Configuration',
-                            message: 'Invalid configuration file. Missing required fields.',
-                            type: 'error'
-                          });
+                            setDialogState({
+                              isOpen: true,
+                              title: 'Credentials Imported',
+                              message: 'Client ID and API Key imported from .env file! Please enter your Spreadsheet ID to continue.',
+                              type: 'success'
+                            });
+                          } else {
+                            throw new Error("No config found");
+                          }
                         }
                       } catch (err) {
                         setDialogState({
                           isOpen: true,
                           title: 'Parse Error',
-                          message: 'Failed to parse JSON file.',
+                          message: 'Failed to parse configuration file.',
                           type: 'error'
                         });
                       }
@@ -545,22 +707,60 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
 
       {configType === 'MANUAL' && (
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl animate-in slide-in-from-top-2">
-          <p className="text-xs text-blue-800 mb-3 font-semibold">Enter your Google Cloud credentials:</p>
+          {(import.meta.env.VITE_GOOGLE_CLIENT_ID && import.meta.env.VITE_GOOGLE_API_KEY) && (
+            <div className="mb-4 p-1 bg-white/50 rounded-lg flex text-sm">
+              <button
+                onClick={() => {
+                  setUseServiceCreds(true);
+                  // Dynamic merge in handleConnect handles credentials
+                }}
+                className={`flex-1 py-1.5 px-3 rounded-md font-medium transition-all ${useServiceCreds ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 hover:bg-blue-100'}`}
+              >
+                Managed Service
+              </button>
+              <button
+                onClick={() => {
+                  setUseServiceCreds(false);
+                  // Don't auto-fill env vars, let user type own or use import
+                }}
+                className={`flex-1 py-1.5 px-3 rounded-md font-medium transition-all ${!useServiceCreds ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 hover:bg-blue-100'}`}
+              >
+                Custom Config
+              </button>
+            </div>
+          )}
+
+          {useServiceCreds ? (
+            <div className="bg-white border border-blue-200 rounded-lg p-3 mb-3 text-blue-800 text-sm flex items-center gap-2">
+              <Shield size={18} className="shrink-0 text-blue-600" />
+              <div>
+                <p className="font-semibold text-xs uppercase tracking-wider text-blue-600">Service Configured</p>
+                <p className="text-xs opacity-80">Credentials provided by environment. Just enter the Sheet ID.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-blue-800 mb-3 font-semibold">Enter your Google Cloud credentials:</p>
+              <div className="space-y-3 mb-3">
+                <input
+                  type="text"
+                  placeholder="Client ID"
+                  value={manualConfig.clientId}
+                  onChange={e => setManualConfig({ ...manualConfig, clientId: e.target.value })}
+                  className="w-full p-2.5 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                <input
+                  type="text"
+                  placeholder="API Key"
+                  value={manualConfig.apiKey}
+                  onChange={e => setManualConfig({ ...manualConfig, apiKey: e.target.value })}
+                  className="w-full p-2.5 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+              </div>
+            </>
+          )}
+
           <div className="space-y-3">
-            <input
-              type="text"
-              placeholder="Client ID"
-              value={manualConfig.clientId}
-              onChange={e => setManualConfig({ ...manualConfig, clientId: e.target.value })}
-              className="w-full p-2.5 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            />
-            <input
-              type="text"
-              placeholder="API Key"
-              value={manualConfig.apiKey}
-              onChange={e => setManualConfig({ ...manualConfig, apiKey: e.target.value })}
-              className="w-full p-2.5 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            />
             <input
               type="text"
               placeholder="Spreadsheet ID"
@@ -597,8 +797,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
             )}
           </div>
         </div>
-      )}
-    </div>
+      )
+      }
+    </div >
   );
 
   const renderWalletsStep = () => {
@@ -712,120 +913,143 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-stretch">
-
-      {/* Left Sidebar - Visual Stepper */}
-      <div className="hidden lg:flex w-1/3 bg-green-900 text-white p-12 flex-col justify-between relative overflow-hidden">
-        {/* Decorative Background */}
-        <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-          <div className="absolute top-[-10%] right-[-10%] w-[300px] h-[300px] rounded-full bg-white blur-3xl"></div>
-          <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] rounded-full bg-green-400 blur-3xl"></div>
-        </div>
-
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-12">
-            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-              <Wallet size={20} className="text-white" />
-            </div>
-            <span className="font-bold text-xl tracking-tight">FamilyFinance</span>
-          </div>
-
-          <div className="space-y-1">
-            {STEPS.map((step, index) => {
-              const isActive = index === currentStep;
-              const isCompleted = index < currentStep;
-
-              return (
-                <div key={step.id} className="flex items-start gap-4 p-2 transition-all">
-                  <div className={`mt-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${isActive ? 'bg-white text-green-900 scale-110' : isCompleted ? 'bg-green-700 text-green-200' : 'bg-green-900/50 border border-green-700 text-green-700'}`}>
-                    {isCompleted ? <Check size={14} /> : index + 1}
-                  </div>
-                  <div>
-                    <h4 className={`text-sm font-bold transition-colors ${isActive ? 'text-white' : isCompleted ? 'text-green-200' : 'text-green-800'}`}>
-                      {step.title}
-                    </h4>
-                    {isActive && (
-                      <p className="text-xs text-green-300 mt-1 animate-in fade-in slide-in-from-left-2">
-                        {step.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="relative z-10 bg-white/10 backdrop-blur-md p-5 rounded-xl border border-white/10">
-          <div className="flex items-center gap-2 mb-2 text-green-200 font-semibold text-sm">
-            <HelpCircle size={16} /> {TIPS[currentStep]?.title || "Tip"}
-          </div>
-          <p className="text-sm text-green-50 leading-relaxed">
-            {TIPS[currentStep]?.text}
-          </p>
-        </div>
-      </div>
-
-      {/* Right Side - Content */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden bg-white">
-        {/* Mobile Header */}
-        <div className="lg:hidden p-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-20">
-          <span className="font-bold text-gray-800">Setup</span>
-          <div className="text-xs font-medium text-gray-500">
-            Step {currentStep + 1} of {STEPS.length}
-          </div>
-        </div>
-
-        {/* Progress Bar (Mobile) */}
-        <div className="lg:hidden w-full h-1 bg-gray-100">
-          <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}></div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-12 flex flex-col">
-          <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto w-full">
-            {currentStep === 0 && renderWelcomeStep()}
-            {currentStep === 1 && renderDataStep()}
-            {currentStep === 2 && renderCurrencyStep()}
-            {currentStep === 3 && renderFamilyStep()}
-            {currentStep === 4 && renderWalletsStep()}
-          </div>
-        </div>
-
-        {/* Footer Navigation */}
-        {currentStep > 0 && (
-          <div className="p-6 lg:px-12 border-t border-gray-100 bg-gray-50 lg:bg-white flex justify-between items-center max-w-full">
-            <button
-              onClick={prevStep}
-              className="px-6 py-3 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              Back
-            </button>
-
-            {currentStep < STEPS.length - 1 ? (
-              <button
-                onClick={nextStep}
-                className="px-8 py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-all flex items-center gap-2 shadow-sm"
-              >
-                Next <ChevronRight size={18} />
-              </button>
-            ) : (
-              <button
-                onClick={handleFinish}
-                className="px-8 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-all flex items-center gap-2 shadow-md shadow-green-200"
-              >
-                {hasExistingData ? "Finish Setup" : "Complete Setup"} <Check size={18} />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+    <>
       <Dialog
         isOpen={dialogState.isOpen}
-        onClose={() => setDialogState(prev => ({ ...prev, isOpen: false }))}
+        onClose={() => setDialogState({ ...dialogState, isOpen: false })}
+        onConfirm={() => setDialogState({ ...dialogState, isOpen: false })}
         title={dialogState.title}
         message={dialogState.message}
         type={dialogState.type}
+        showCancel={false}
       />
-    </div>
+
+      <div className="min-h-screen bg-gray-50 flex items-stretch">
+
+        {/* Left Sidebar - Visual Stepper */}
+        <div className="hidden lg:flex w-1/3 bg-green-900 text-white p-12 flex-col justify-between relative overflow-hidden">
+          {/* Decorative Background */}
+          <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+            <div className="absolute top-[-10%] right-[-10%] w-[300px] h-[300px] rounded-full bg-white blur-3xl"></div>
+            <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] rounded-full bg-green-400 blur-3xl"></div>
+          </div>
+
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-12">
+              <button
+                onClick={onBack}
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer"
+                title="Back to landing page"
+              >
+                <img src="/images/simple_famfin_light_v2.png" alt="SimpleFamFin Logo" className="h-16 w-auto object-contain" />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              {STEPS.map((step, index) => {
+                const isActive = index === currentStep;
+                const isCompleted = index < currentStep;
+
+                return (
+                  <div key={step.id} className="flex items-start gap-4 p-2 transition-all">
+                    <div className={`mt-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${isActive ? 'bg-white text-green-900 scale-110' : isCompleted ? 'bg-green-700 text-green-200' : 'bg-green-900/50 border border-green-700 text-green-700'}`}>
+                      {isCompleted ? <Check size={14} /> : index + 1}
+                    </div>
+                    <div>
+                      <h4 className={`text-sm font-bold transition-colors ${isActive ? 'text-white' : isCompleted ? 'text-green-200' : 'text-green-800'}`}>
+                        {step.title}
+                      </h4>
+                      {isActive && (
+                        <p className="text-xs text-green-300 mt-1 animate-in fade-in slide-in-from-left-2">
+                          {step.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="relative z-10 bg-white/10 backdrop-blur-md p-5 rounded-xl border border-white/10">
+            <div className="flex items-center gap-2 mb-2 text-green-200 font-semibold text-sm">
+              <HelpCircle size={16} /> {TIPS[currentStep]?.title || "Tip"}
+            </div>
+            <p className="text-sm text-green-50 leading-relaxed">
+              {TIPS[currentStep]?.text}
+            </p>
+          </div>
+        </div>
+
+        {/* Right Side - Content */}
+        <div className="flex-1 flex flex-col h-screen overflow-hidden bg-white">
+          {/* Mobile Header */}
+          <div className="lg:hidden p-4 border-b border-gray-100 bg-white sticky top-0 z-20">
+            <div className="flex items-center justify-between mb-2">
+              <button
+                onClick={onBack}
+                className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+                title="Back to landing page"
+              >
+                <img src="/images/simple_famfin.png" alt="SimpleFamFin Logo" className="h-8 w-auto object-contain" />
+              </button>
+              <div className="text-xs font-medium text-gray-500">
+                Step {currentStep + 1} of {STEPS.length}
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Bar (Mobile) */}
+          <div className="lg:hidden w-full h-1 bg-gray-100">
+            <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}></div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-12 flex flex-col">
+            <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto w-full">
+              {currentStep === 0 && renderWelcomeStep()}
+              {currentStep === 1 && renderDataStep()}
+              {currentStep === 2 && renderCurrencyStep()}
+              {currentStep === 3 && renderFamilyStep()}
+              {currentStep === 4 && renderWalletsStep()}
+            </div>
+          </div>
+
+          {/* Footer Navigation */}
+          {currentStep > 0 && (
+            <div className="p-6 lg:px-12 border-t border-gray-100 bg-gray-50 lg:bg-white flex justify-between items-center max-w-full">
+              <button
+                onClick={prevStep}
+                className="px-6 py-3 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                Back
+              </button>
+
+              {currentStep < STEPS.length - 1 ? (
+                <button
+                  onClick={nextStep}
+                  className="px-8 py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-all flex items-center gap-2 shadow-sm"
+                >
+                  Next <ChevronRight size={18} />
+                </button>
+              ) : (
+                <button
+                  onClick={handleFinish}
+                  className="px-8 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-all flex items-center gap-2 shadow-md shadow-green-200"
+                >
+                  {hasExistingData ? "Finish Setup" : "Complete Setup"} <Check size={18} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        <Dialog
+          isOpen={dialogState.isOpen}
+          onClose={() => setDialogState(prev => ({ ...prev, isOpen: false }))}
+          title={dialogState.title}
+          message={dialogState.message}
+          type={dialogState.type}
+        />
+      </div>
+    </>
   );
 };

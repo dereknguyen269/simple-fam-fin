@@ -47,10 +47,10 @@ export const Home: React.FC<HomeProps> = ({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  // Filter today's transactions
+  // Filter today's transactions (excluding transfers)
   const todayTransactions = useMemo(() => {
     return expenses
-      .filter(e => e.date === today)
+      .filter(e => e.date === today && e.type !== TransactionType.TRANSFER)
       .map(e => ({
         ...e,
         amount: convertFromBase(e.amount, currencyConfig)
@@ -61,7 +61,7 @@ export const Home: React.FC<HomeProps> = ({
       });
   }, [expenses, today, currencyConfig]);
 
-  // Calculate today's summary
+  // Calculate today's summary (excluding transfers)
   const todaySummary = useMemo(() => {
     const income = todayTransactions
       .filter(t => t.type === TransactionType.INCOME)

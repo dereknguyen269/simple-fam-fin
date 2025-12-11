@@ -1,5 +1,6 @@
-
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Routes, Route, useNavigate, Link } from 'react-router-dom';
 import {
   Expense,
   RecurringExpense,
@@ -16,6 +17,7 @@ import {
 } from './types';
 import {
   CURRENCY_SYMBOLS,
+  AVAILABLE_CURRENCIES,
   DEFAULT_MEMBER_ITEMS,
   DEFAULT_CATEGORY_ITEMS
 } from './constants';
@@ -42,7 +44,8 @@ import {
   saveGoogleSyncEnabled,
   isSetupComplete,
   setSetupComplete,
-  getCategoryColorsMap
+  getCategoryColorsMap,
+  getGoogleToken
 } from './services/storageService';
 import {
   initializeGapiClient,
@@ -73,6 +76,12 @@ import { SettingsModal } from './components/SettingsModal';
 import { HelpModal } from './components/HelpModal';
 import { Dialog } from './components/Dialog';
 import { FeedbackModal } from './components/FeedbackModal';
+import { LanguageSwitcher } from './components/LanguageSwitcher';
+import { AboutPage } from './components/AboutPage';
+import { PrivacyPage } from './components/PrivacyPage';
+import { TermsPage } from './components/TermsPage';
+import { CookiesPage } from './components/CookiesPage';
+import { ContactPage } from './components/ContactPage';
 import {
   Wallet as WalletIcon,
   LayoutDashboard,
@@ -101,6 +110,9 @@ enum View {
 }
 
 const App: React.FC = () => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+
   // App State
   const [needsSetup, setNeedsSetup] = useState(false);
   const [hasStarted, setHasStarted] = useState(false); // New state to track if user clicked "Get Started"
@@ -143,6 +155,7 @@ const App: React.FC = () => {
 
   // Currency State
   const [currencyCode, setCurrencyCode] = useState<CurrencyCode>('USD');
+  const [isCurrencyMenuOpen, setIsCurrencyMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -602,11 +615,61 @@ const App: React.FC = () => {
   const handleSetupComplete = async () => {
     setNeedsSetup(false);
     refreshLocalData();
+
     // Check if user configured manual google connection in setup
     const config = getGoogleConfig();
-    if (config && config.clientId) {
+    const syncEnabled = getGoogleSyncEnabled();
+
+    if (config && config.clientId && syncEnabled) {
       setGoogleConfig(config);
-      await initializeGapiClient(config);
+
+      try {
+        await initializeGapiClient(config);
+
+        // Check if we have a saved token from the setup wizard
+        const savedToken = getGoogleToken();
+        if (savedToken && window.gapi?.client) {
+          window.gapi.client.setToken(savedToken);
+
+          try {
+            // Try to fetch data to verify connection
+            const { expenses: sheetExpenses, wallets: sheetWallets } = await fetchExpensesFromSheet(config.spreadsheetId);
+
+            if (sheetExpenses) {
+              setExpenses(sheetExpenses);
+              saveExpenses(sheetExpenses);
+            }
+            if (sheetWallets) {
+              setWallets(sheetWallets);
+              saveWallets(sheetWallets);
+            }
+
+            await syncRefData(config.spreadsheetId);
+
+            // Successfully connected!
+            setIsGoogleConnected(true);
+            setSyncStatus('synced');
+            setLastSynced(new Date());
+
+            // Load user profile
+            const profile = await getUserProfile();
+            if (profile) setUserProfile(profile);
+
+          } catch (fetchError) {
+            console.error("Failed to fetch data after setup:", fetchError);
+            // Token might be expired, user will need to reconnect
+            setIsGoogleConnected(false);
+            setSyncStatus('offline');
+          }
+        } else {
+          // No token, user will need to manually connect
+          setIsGoogleConnected(false);
+          setSyncStatus('offline');
+        }
+      } catch (err) {
+        console.error("GAPI Init Error after setup", err);
+        setSyncStatus('offline');
+      }
     }
   };
 
@@ -860,22 +923,70 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDisconnectGoogle = () => {
+  const handleDisconnectGoogle = async () => {
     showDialog(
       'Confirm Sign Out',
-      'Are you sure you want to disconnect from Google Sheets?\n\nYour data will remain in local storage, but live sync will stop until you reconnect.',
+      'Are you sure you want to sign out?\n\nAll your data will be synced to Google Sheets and then cleared from this device. You will be redirected to the landing page.',
       'warning',
-      () => {
-        handleSignOut();
-        setIsGoogleConnected(false);
-        saveGoogleSyncEnabled(false);
-        setSyncStatus('offline');
-        setSyncError(null);
+      async () => {
+        try {
+          // Wait for any pending saves to complete
+          if (syncStatus === 'saving' || isSavingRef.current) {
+            setSyncStatus('saving');
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Wait up to 3s
+          }
 
-        // Clean up polling interval
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
+          // Perform one final sync to ensure everything is saved
+          if (isGoogleConnected && googleConfig?.spreadsheetId) {
+            setSyncStatus('saving');
+
+            try {
+              await Promise.all([
+                saveExpensesToSheet(googleConfig.spreadsheetId, expenses, wallets),
+                saveRefData(googleConfig.spreadsheetId, categoryItems, memberItems),
+                saveGoalsToSheet(googleConfig.spreadsheetId, goals),
+                saveBudgetsToSheet(googleConfig.spreadsheetId, budgets)
+              ]);
+
+              console.log("Final sync completed successfully");
+            } catch (syncError) {
+              console.error("Final sync failed:", syncError);
+              // Continue with sign out even if sync fails
+            }
+          }
+
+          // Sign out from Google
+          handleSignOut();
+
+          // Clear all state
+          setIsGoogleConnected(false);
+          saveGoogleSyncEnabled(false);
+          setSyncStatus('offline');
+          setSyncError(null);
+          setUserProfile(null);
+
+          // Clean up polling interval
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+
+          // Clear all local data
+          localStorage.clear();
+
+          // Reset to landing page by clearing setup flag
+          setNeedsSetup(false);
+          setHasStarted(false);
+
+          // Reload to show landing page
+          window.location.reload();
+
+        } catch (error) {
+          console.error("Error during sign out:", error);
+          // Force sign out anyway
+          handleSignOut();
+          localStorage.clear();
+          window.location.reload();
         }
       },
       true  // Show cancel button
@@ -967,9 +1078,22 @@ const App: React.FC = () => {
 
   if (needsSetup) {
     if (!hasStarted) {
-      return <LandingPage onGetStarted={() => setHasStarted(true)} />;
+      return (
+        <Routes>
+          <Route path="/" element={
+            <LandingPage
+              onGetStarted={() => setHasStarted(true)}
+            />
+          } />
+          <Route path="/about" element={<AboutPage onBack={() => navigate('/')} />} />
+          <Route path="/privacy" element={<PrivacyPage onBack={() => navigate('/')} />} />
+          <Route path="/terms" element={<TermsPage onBack={() => navigate('/')} />} />
+          <Route path="/cookies" element={<CookiesPage onBack={() => navigate('/')} />} />
+          <Route path="/contact" element={<ContactPage onBack={() => navigate('/')} />} />
+        </Routes>
+      );
     }
-    return <SetupWizard onComplete={handleSetupComplete} onSkip={handleSkipSetup} />;
+    return <SetupWizard onComplete={handleSetupComplete} onSkip={handleSkipSetup} onBack={() => setHasStarted(false)} />;
   }
 
   // Helper for Status Badge
@@ -979,14 +1103,14 @@ const App: React.FC = () => {
     if (syncStatus === 'saving') {
       return (
         <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-100">
-          <RefreshCw size={10} className="animate-spin" /> Saving...
+          <RefreshCw size={10} className="animate-spin" /> {t('sync.saving')}
         </span>
       );
     }
     if (syncStatus === 'fetching') {
       return (
         <span className="flex items-center gap-1.5 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full border border-blue-100">
-          <Loader2 size={10} className="animate-spin" /> Syncing...
+          <Loader2 size={10} className="animate-spin" /> {t('sync.syncing')}
         </span>
       );
     }
@@ -996,13 +1120,13 @@ const App: React.FC = () => {
           className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-100 cursor-help"
           title={syncError || 'Sync error occurred'}
         >
-          <AlertTriangle size={10} /> Sync Error
+          <AlertTriangle size={10} /> {t('sync.syncError')}
         </span>
       );
     }
     return (
       <span className="flex items-center gap-1.5 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-100" title={`Last synced: ${lastSynced?.toLocaleTimeString()}`}>
-        <CheckCircle2 size={10} /> Live
+        <CheckCircle2 size={10} /> {t('sync.live')}
       </span>
     );
   };
@@ -1065,11 +1189,8 @@ const App: React.FC = () => {
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="h-full flex flex-col">
-          <div className="p-6 flex items-center gap-3 border-b border-gray-100">
-            <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center text-white">
-              <WalletIcon size={18} />
-            </div>
-            <h1 className="text-xl font-bold text-gray-800 tracking-tight">FamilyFinance</h1>
+          <div className="py-6 px-6 flex items-center justify-center border-b border-gray-100">
+            <img src="/images/simple_famfin.png" alt="SimpleFamFin Logo" className="w-48 h-auto object-contain" />
           </div>
 
           <nav className="flex-1 p-4 space-y-2">
@@ -1081,7 +1202,7 @@ const App: React.FC = () => {
                 }`}
             >
               <HomeIcon size={20} />
-              Home
+              {t('navigation.home')}
             </button>
             <button
               onClick={() => { setCurrentView(View.DASHBOARD); setIsSidebarOpen(false); }}
@@ -1091,7 +1212,7 @@ const App: React.FC = () => {
                 }`}
             >
               <LayoutDashboard size={20} />
-              Dashboard
+              {t('navigation.dashboard')}
             </button>
             <button
               onClick={() => { setCurrentView(View.EXPENSES); setIsSidebarOpen(false); }}
@@ -1101,7 +1222,7 @@ const App: React.FC = () => {
                 }`}
             >
               <Table2 size={20} />
-              Transactions
+              {t('navigation.transactions')}
             </button>
             <button
               onClick={() => { setCurrentView(View.GOALS); setIsSidebarOpen(false); }}
@@ -1111,7 +1232,7 @@ const App: React.FC = () => {
                 }`}
             >
               <Target size={20} />
-              Goals & Wallets
+              {t('navigation.goals')}
             </button>
           </nav>
 
@@ -1121,21 +1242,21 @@ const App: React.FC = () => {
               className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all"
             >
               <HelpCircle size={20} />
-              Help & Tutorials
+              {t('navigation.help')}
             </button>
             <button
               onClick={() => setIsFeedbackOpen(true)}
               className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all"
             >
               <MessageSquare size={20} />
-              Feedback / Issues
+              {t('navigation.feedback')}
             </button>
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all"
             >
               <Settings size={20} />
-              Settings
+              {t('navigation.settings')}
             </button>
 
             {isGoogleConnected ? (
@@ -1146,11 +1267,11 @@ const App: React.FC = () => {
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all border border-gray-200"
                 >
                   <RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />
-                  {isSyncing ? "Refreshing..." : "Refresh Data"}
+                  {isSyncing ? t('sync.refreshing') : t('sync.refreshData')}
                 </button>
                 <div className="text-[10px] text-center text-gray-400">
                   {syncStatus === 'saving' ? (
-                    <span className="text-amber-600 font-medium animate-pulse">Auto-saving...</span>
+                    <span className="text-amber-600 font-medium animate-pulse">{t('sync.autoSaving')}</span>
                   ) : syncStatus === 'error' && syncError ? (
                     <span className="text-red-600 font-medium">{syncError}</span>
                   ) : (
@@ -1162,7 +1283,7 @@ const App: React.FC = () => {
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-xl transition-all mt-2 border border-transparent hover:border-red-100"
                 >
                   <LogOut size={20} />
-                  Sign Out
+                  {t('header.signOut')}
                 </button>
               </>
             ) : (
@@ -1171,7 +1292,7 @@ const App: React.FC = () => {
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all mt-2 ${isSyncEnabled ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-gray-500 hover:bg-gray-100'}`}
               >
                 <LogIn size={20} />
-                {isSyncEnabled ? 'Reconnect Sync' : 'Connect Google'}
+                {isSyncEnabled ? t('sync.reconnectNow') : t('sync.connectCloud')}
               </button>
             )}
 
@@ -1186,15 +1307,61 @@ const App: React.FC = () => {
               <Menu size={20} />
             </button>
             <h2 className="text-lg font-semibold text-gray-800">
-              {currentView === View.HOME ? 'Home' : currentView === View.DASHBOARD ? 'Wallet Overview' : currentView === View.EXPENSES ? 'Transactions' : 'Financial Goals'}
+              {currentView === View.HOME ? t('navigation.home') : currentView === View.DASHBOARD ? t('header.walletOverview') : currentView === View.EXPENSES ? t('navigation.transactions') : t('header.financialGoals')}
             </h2>
           </div>
           <div className="hidden lg:flex items-center gap-4 relative">
             {getStatusBadge()}
 
-            <div className="flex flex-col items-end">
-              <span className="text-xs text-gray-500">Currency</span>
-              <span className="text-sm font-semibold text-gray-800">{currencyCode} ({CURRENCY_SYMBOLS[currencyCode]})</span>
+            {/* <LanguageSwitcher /> */}
+
+            <div className="relative">
+              <button
+                onClick={() => setIsCurrencyMenuOpen(!isCurrencyMenuOpen)}
+                className="flex flex-col items-end px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1"
+              >
+                <span className="text-xs text-gray-500">{t('header.currency')}</span>
+                <span className="text-sm font-semibold text-gray-800">{currencyCode} ({CURRENCY_SYMBOLS[currencyCode]})</span>
+              </button>
+
+              {/* Currency Dropdown */}
+              {isCurrencyMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40 bg-transparent"
+                    onClick={() => setIsCurrencyMenuOpen(false)}
+                  />
+                  <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 max-h-96 overflow-y-auto">
+                    <div className="p-2 border-b border-gray-100 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-600 px-2">{t('header.selectCurrency')}</p>
+                    </div>
+                    <div className="p-2 space-y-1">
+                      {AVAILABLE_CURRENCIES.map((currency) => (
+                        <button
+                          key={currency}
+                          onClick={() => {
+                            setCurrencyCode(currency);
+                            saveCurrencyCode(currency);
+                            setIsCurrencyMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 text-sm rounded-lg transition-colors ${currencyCode === currency
+                            ? 'bg-green-50 text-green-700 font-semibold'
+                            : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="text-lg">{CURRENCY_SYMBOLS[currency]}</span>
+                            <span>{currency}</span>
+                          </span>
+                          {currencyCode === currency && (
+                            <CheckCircle2 size={16} className="text-green-600" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {!isGoogleConnected && (
@@ -1206,7 +1373,7 @@ const App: React.FC = () => {
                   }`}
               >
                 {isSyncEnabled ? <RefreshCw size={14} /> : <CloudLightning size={14} />}
-                {isSyncEnabled ? 'Reconnect' : 'Connect'}
+                {isSyncEnabled ? t('header.reconnect') : t('header.connect')}
               </button>
             )}
 
@@ -1246,8 +1413,8 @@ const App: React.FC = () => {
                   </div>
                 ) : (
                   <div className="p-5 text-center border-b border-gray-50">
-                    <p className="text-sm text-gray-500 italic">Guest User</p>
-                    <p className="text-xs text-gray-400 mt-1">Sign in to sync data</p>
+                    <p className="text-sm text-gray-500 italic">{t('header.guestUser')}</p>
+                    <p className="text-xs text-gray-400 mt-1">{t('header.signInToSync')}</p>
                   </div>
                 )}
 
@@ -1257,7 +1424,7 @@ const App: React.FC = () => {
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                   >
                     <Settings size={18} className="text-gray-400" />
-                    Settings
+                    {t('navigation.settings')}
                   </button>
 
                   {isGoogleConnected && (
@@ -1266,7 +1433,7 @@ const App: React.FC = () => {
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                     >
                       <LogOut size={18} />
-                      Sign Out
+                      {t('header.signOut')}
                     </button>
                   )}
                 </div>
@@ -1279,8 +1446,8 @@ const App: React.FC = () => {
           <div className={`border-b px-6 py-2 flex items-center justify-between shrink-0 ${isSyncEnabled ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-200'}`}>
             <div className={`flex items-center gap-2 text-xs ${isSyncEnabled ? 'text-amber-800' : 'text-gray-500'}`}>
               <AlertTriangle size={14} className={isSyncEnabled ? "text-amber-600" : "text-gray-400"} />
-              <span className="font-semibold">{isSyncEnabled ? 'Sync Paused:' : 'Local Storage Mode:'}</span>
-              <span>{isSyncEnabled ? 'Session expired or needs verification.' : 'Data is saved only on this browser.'}</span>
+              <span className="font-semibold">{isSyncEnabled ? t('sync.syncPaused') : t('sync.localStorageMode')}</span>
+              <span>{isSyncEnabled ? t('sync.sessionExpired') : t('sync.dataSavedLocally')}</span>
             </div>
             {/* <button
               onClick={isSyncEnabled ? handleManualSync : () => setIsSettingsOpen(true)}

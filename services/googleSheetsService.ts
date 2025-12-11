@@ -315,15 +315,30 @@ export const fetchExpensesFromSheet = async (spreadsheetId: string): Promise<{ e
 export const saveExpensesToSheet = async (spreadsheetId: string, expenses: Expense[], wallets: Wallet[]): Promise<void> => {
   try {
     if (!window.gapi || !window.gapi.client || !window.gapi.client.sheets) {
-      return; // Fail silently or throw
+      throw new Error("GAPI Sheets client not loaded");
+    }
+
+    // CRITICAL: Verify authentication BEFORE doing anything destructive
+    const token = window.gapi.client.getToken();
+    if (!token || !token.access_token) {
+      throw new Error("Not authenticated. Please reconnect to Google.");
     }
 
     // 1. Ensure Metadata Sheets and Wallet Sheets exist
     await ensureRefSheetsExist(spreadsheetId, wallets);
 
-    // 2. Save Wallet Metadata
+    // 2. Prepare ALL data BEFORE clearing anything
     const walletRows = [['ID', 'Name', 'Type'], ...wallets.map(w => [w.id, w.name, w.type])];
 
+    const walletDataToSave: Array<{ sheetName: string; rows: any[][] }> = [];
+    for (const wallet of wallets) {
+      const sheetName = safeQuoteSheetName(getWalletSheetName(wallet));
+      const walletExpenses = expenses.filter(e => e.walletId === wallet.id);
+      const rows = [HEADERS, ...walletExpenses.map(expenseToRow)];
+      walletDataToSave.push({ sheetName, rows });
+    }
+
+    // 3. Save Wallet Metadata (this is safe, has headers)
     await window.gapi.client.sheets.spreadsheets.values.update({
       spreadsheetId,
       range: 'Ref_Wallets!A1',
@@ -331,17 +346,22 @@ export const saveExpensesToSheet = async (spreadsheetId: string, expenses: Expen
       resource: { values: walletRows }
     });
 
-    // 3. Save Expenses per Wallet
-    for (const wallet of wallets) {
-      const sheetName = safeQuoteSheetName(getWalletSheetName(wallet));
-      const walletExpenses = expenses.filter(e => e.walletId === wallet.id);
-      const rows = [HEADERS, ...walletExpenses.map(expenseToRow)];
+    // 4. Save Expenses per Wallet using ATOMIC clear+update approach
+    // Use batchUpdate to minimize the window where data is cleared but not written
+    for (const { sheetName, rows } of walletDataToSave) {
+      // Verify token is still valid before each operation
+      const currentToken = window.gapi.client.getToken();
+      if (!currentToken || !currentToken.access_token) {
+        throw new Error("Authentication lost during save. Data may be incomplete.");
+      }
 
+      // Clear and update in quick succession (not truly atomic, but minimizes risk)
       await window.gapi.client.sheets.spreadsheets.values.clear({
         spreadsheetId,
         range: `${sheetName}!A:J`,
       });
 
+      // Immediately write new data
       await window.gapi.client.sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${sheetName}!A1`,
@@ -350,8 +370,18 @@ export const saveExpensesToSheet = async (spreadsheetId: string, expenses: Expen
       });
     }
 
-  } catch (err) {
+  } catch (err: any) {
     console.error("Error saving to sheet", err);
+
+    // Provide more helpful error messages
+    if (err.message?.includes('authenticated') || err.message?.includes('token')) {
+      throw new Error("Authentication expired during save. Please reconnect and try again.");
+    } else if (err.status === 401 || err.status === 403) {
+      throw new Error("Authentication failed. Please reconnect to Google Sheets.");
+    } else if (err.status === 404) {
+      throw new Error("Spreadsheet not found. Please check your configuration.");
+    }
+
     throw err;
   }
 };

@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Save, Database, AlertCircle, Coins, HelpCircle, ChevronDown, ChevronUp, ExternalLink, Copy, Check, FileSpreadsheet, RotateCcw, Trash2, Unplug, List, Plus, Pencil, ArrowUpCircle, ArrowDownCircle, User, Share2, Download, Upload } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { X, Save, Database, AlertCircle, Coins, HelpCircle, ChevronDown, ChevronUp, ExternalLink, Copy, Check, FileSpreadsheet, RotateCcw, Trash2, Unplug, List, Plus, Pencil, ArrowUpCircle, ArrowDownCircle, User, Share2, Download, Upload, Shield } from 'lucide-react';
 import { GoogleConfig, CurrencyCode, CategoryItem, TransactionType, MemberItem, UserProfile } from '../types';
 import { getGoogleConfig, saveGoogleConfig, getCurrencyCode, saveCurrencyCode } from '../services/storageService';
 import { AVAILABLE_CURRENCIES, CURRENCY_RATES, CURRENCY_SYMBOLS } from '../constants';
@@ -48,10 +49,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   });
 
   const [currency, setCurrency] = useState<CurrencyCode>('USD');
+  const { t } = useTranslation();
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+
+  // New state for managed credentials
+  const [useServiceCreds, setUseServiceCreds] = useState(false);
 
   // Dialog state
   const [dialogState, setDialogState] = useState<{
@@ -119,11 +124,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
 
     const savedConfig = getGoogleConfig();
-    if (savedConfig) setConfig(savedConfig);
+    const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    const envApiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+    const hasEnvVars = !!(envClientId && envApiKey);
+
+    if (savedConfig) {
+      // If config matches env vars, it's from Managed Service
+      if (hasEnvVars && savedConfig.clientId === envClientId && savedConfig.apiKey === envApiKey) {
+        setUseServiceCreds(true);
+        setConfig(savedConfig);
+      } else {
+        // User manually entered credentials
+        setUseServiceCreds(false);
+        setConfig(savedConfig);
+      }
+    } else {
+      // No saved config - default to Custom Config with empty fields
+      setUseServiceCreds(false);
+      setConfig({ clientId: '', apiKey: '', spreadsheetId: '' });
+    }
 
     const savedCurrency = getCurrencyCode();
     setCurrency(savedCurrency);
   }, [isOpen]);
+
+  // Update config when toggling managed service
+  useEffect(() => {
+    if (!isOpen) return; // Prevent run on mount if closed
+
+    if (useServiceCreds) {
+      setConfig(prev => ({
+        ...prev,
+        clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
+        apiKey: import.meta.env.VITE_GOOGLE_API_KEY || ''
+      }));
+    }
+  }, [useServiceCreds, isOpen]);
 
   // Sync props to local state when opening
   useEffect(() => {
@@ -140,10 +176,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   const handleSave = () => {
-    saveGoogleConfig(config);
+    let finalConfig = { ...config };
+
+    // Ensure we use env vars if managed service is selected (just in case)
+    if (useServiceCreds) {
+      finalConfig.clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+      finalConfig.apiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
+    }
+
+    saveGoogleConfig(finalConfig);
     saveCurrencyCode(currency);
 
-    onConnect(config);
+    onConnect(finalConfig);
     onCurrencyChange(currency);
 
     // Process renames for parent to update expenses
@@ -231,23 +275,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleExportConfig = () => {
-    if (!config.clientId || !config.apiKey || !config.spreadsheetId) {
+    if (!config.spreadsheetId) {
       showDialog(
-        'Missing Configuration',
-        'Please fill in the configuration fields first.',
+        'Missing Spreadsheet ID',
+        'Please enter your Spreadsheet ID first.',
         'warning'
       );
       return;
     }
 
+    // Check if using Managed Service
+    const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    const envApiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+    const isManagedService = !!(useServiceCreds && envClientId && envApiKey);
+
     const configData = {
       version: "1.0",
       timestamp: new Date().toISOString(),
-      config: {
-        clientId: config.clientId,
-        apiKey: config.apiKey,
-        spreadsheetId: config.spreadsheetId
-      }
+      isManagedService: isManagedService,
+      config: isManagedService
+        ? {
+          // For Managed Service, only export Spreadsheet ID
+          spreadsheetId: config.spreadsheetId,
+          note: "This configuration uses Managed Service credentials. Client ID and API Key are provided by environment variables."
+        }
+        : {
+          // For Custom Config, export everything
+          clientId: config.clientId,
+          apiKey: config.apiKey,
+          spreadsheetId: config.spreadsheetId
+        }
     };
 
     const jsonString = JSON.stringify(configData, null, 2);
@@ -265,7 +322,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleImportConfig = () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json';
+    input.accept = '.json,.env,.txt'; // Accept JSON, .env, and text files
 
     input.onchange = (e: any) => {
       const file = e.target?.files?.[0];
@@ -273,36 +330,134 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
       const reader = new FileReader();
       reader.onload = (event) => {
-        try {
-          const jsonData = JSON.parse(event.target?.result as string);
-          const configData = jsonData.config || jsonData;
+        const content = event.target?.result as string;
 
-          // Validate the structure
-          if (!configData.clientId || !configData.apiKey || !configData.spreadsheetId) {
+        let newConfig: Partial<GoogleConfig> = {};
+        let isManagedServiceImport = false;
+
+        try {
+          // Try parsing as JSON first
+          try {
+            const jsonData = JSON.parse(content);
+
+            // Check if this is a Managed Service export
+            // Handle both new format (isManagedService: true) and old format (has note field)
+            const configData = jsonData.config || jsonData;
+
+            const isManagedServiceFlag = jsonData.isManagedService === true ||
+              (typeof configData.note === 'string' && configData.note.includes('Managed Service'));
+
+            if (isManagedServiceFlag) {
+              // MANAGED SERVICE IMPORT - Handle completely here
+
+              if (!configData.spreadsheetId) {
+                throw new Error("Missing Spreadsheet ID in Managed Service config");
+              }
+
+              // Update config with only Spreadsheet ID
+              setConfig(prev => ({
+                ...prev,
+                spreadsheetId: configData.spreadsheetId
+              }));
+
+              // Show success dialog
+              showDialog(
+                'Managed Service Config Imported',
+                'Spreadsheet ID imported successfully!\n\nThis configuration uses Managed Service credentials.\n\nClick "Save & Connect" to apply.',
+                'success'
+              );
+
+              return; // EXIT COMPLETELY
+            }
+
+            // CUSTOM CONFIG IMPORT
+            newConfig = {
+              clientId: configData.clientId,
+              apiKey: configData.apiKey,
+              spreadsheetId: configData.spreadsheetId
+            };
+          } catch (jsonError) {
+            // If JSON fails, try parsing as .env / key=value
+            const lines = content.split('\n');
+            const envConfig: any = {};
+
+            lines.forEach(line => {
+              const match = line.match(/^\s*(?:export\s+)?(?:VITE_)?([A-Z0-9_]+)\s*=\s*(.*?)(\s*#.*)?$/);
+              if (match) {
+                const key = match[1];
+                let value = match[2].trim();
+                // Remove quotes if present
+                if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                  value = value.slice(1, -1);
+                }
+
+                if (key === 'GOOGLE_CLIENT_ID') envConfig.clientId = value;
+                else if (key === 'GOOGLE_API_KEY') envConfig.apiKey = value;
+                // Note: We deliberately do NOT parse GOOGLE_SPREADSHEET_ID from .env files
+                // to require the user to manually enter/verify their own sheet ID.
+              }
+            });
+
+            if (Object.keys(envConfig).length > 0) {
+              newConfig = envConfig;
+            } else {
+              throw new Error("No valid configuration found");
+            }
+          }
+
+          // For Managed Service imports, just update Spreadsheet ID
+          if (isManagedServiceImport) {
+            setConfig(prev => ({
+              ...prev,
+              spreadsheetId: newConfig.spreadsheetId || prev.spreadsheetId
+            }));
+
+            // Show success dialog
             showDialog(
-              'Invalid File',
-              'Invalid configuration file format. Missing required fields (clientId, apiKey, or spreadsheetId).',
+              'Managed Service Config Imported',
+              'Spreadsheet ID imported successfully!\n\nThis configuration uses Managed Service credentials.\n\nClick "Save & Connect" to apply.',
+              'success'
+            );
+
+            // Keep current useServiceCreds state (user can toggle if needed)
+            return;
+          }
+
+
+          // For Custom Config imports, validate we have credentials
+          if (!newConfig.clientId || !newConfig.apiKey) {
+            showDialog(
+              'Invalid Config',
+              'Configuration is missing required credentials (Client ID or API Key).',
               'error'
             );
             return;
           }
 
-          // Apply the configuration
-          setConfig({
-            clientId: configData.clientId,
-            apiKey: configData.apiKey,
-            spreadsheetId: configData.spreadsheetId
-          });
+          // Apply the Custom Config
+          setConfig(prev => ({
+            ...prev,
+            clientId: newConfig.clientId || prev.clientId,
+            apiKey: newConfig.apiKey || prev.apiKey,
+            spreadsheetId: newConfig.spreadsheetId || prev.spreadsheetId
+          }));
+
+          // Set to Custom Config mode
+          setUseServiceCreds(false);
+
+          const successMsg = newConfig.spreadsheetId
+            ? "Configuration imported successfully!\n\nClick 'Save & Connect' to apply."
+            : "Credentials imported!\n\nPlease enter your Spreadsheet ID manually, then click 'Save & Connect'.";
 
           showDialog(
             'Import Successful',
-            "Configuration imported successfully!\n\nClick 'Save Changes' to apply and connect.",
+            successMsg,
             'success'
           );
         } catch (error) {
           showDialog(
             'Import Failed',
-            "Failed to parse configuration file. Please ensure it's a valid JSON file.",
+            "Failed to parse configuration file. Please provide a valid JSON config or .env file.",
             'error'
           );
         }
@@ -743,12 +898,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Tutorial Section */}
               {isHelpOpen && (
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-blue-900 animate-fade-in">
-                  <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                    Setup Instructions
+                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                    📚 Setup Guide
+                  </h4>
+
+                  {/* Configuration Modes */}
+                  <div className="mb-4 bg-white/60 p-3 rounded border border-blue-200">
+                    <h5 className="font-semibold text-xs mb-2">Choose Your Configuration Mode:</h5>
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <strong className="text-blue-700">🔐 Managed Service:</strong>
+                        <p className="ml-4 mt-1 text-blue-800">
+                          You only need to enter your Spreadsheet ID.
+                        </p>
+                      </div>
+                      <div>
+                        <strong className="text-blue-700">⚙️ Custom Config:</strong>
+                        <p className="ml-4 mt-1 text-blue-800">
+                          Use this to enter your own Google Cloud credentials. You'll need to create a Google Cloud Project and provide Client ID, API Key, and Spreadsheet ID.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Setup Instructions for Custom Config */}
+                  <h5 className="font-semibold text-xs mb-2 flex items-center gap-2">
+                    Custom Config Setup Instructions
                     <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800" title="Open Google Cloud Console">
                       <ExternalLink size={12} />
                     </a>
-                  </h4>
+                  </h5>
                   <ol className="list-decimal list-inside space-y-3 text-xs">
                     <li>
                       Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="underline font-medium">Google Cloud Console</a> and create a new project.
@@ -759,6 +938,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <li>
                       Go to <strong>APIs & Services {'>'} Credentials</strong> and create:
                       <ul className="list-disc list-inside ml-3 mt-1 space-y-2 text-blue-800">
+                        <li><strong>API Key</strong> (for accessing Google Sheets API).</li>
                         <li><strong>OAuth 2.0 Client ID</strong> (Application type: Web application).</li>
                         <li>
                           <strong>Important:</strong> Add the exact URL below to "Authorized JavaScript origins":
@@ -787,6 +967,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </li>
                   </ol>
+
+                  {/* Export/Import Info */}
+                  <div className="mt-4 pt-3 border-t border-blue-200">
+                    <h5 className="font-semibold text-xs mb-2">💾 Export & Import:</h5>
+                    <ul className="list-disc list-inside text-xs space-y-1 text-blue-800">
+                      <li><strong>Export:</strong> Save your configuration as JSON for backup or sharing.</li>
+                      <li><strong>Managed Service exports:</strong> Only contain Spreadsheet ID (credentials are in environment).</li>
+                      <li><strong>Custom Config exports:</strong> Contain all credentials (Client ID, API Key, Spreadsheet ID).</li>
+                      <li><strong>Import:</strong> Automatically detects configuration type and loads appropriately.</li>
+                    </ul>
+                  </div>
                 </div>
               )}
 
@@ -815,32 +1006,75 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <AlertCircle className="text-green-600 shrink-0 mt-0.5" size={18} />
                   <div className="text-sm text-green-800">
                     <p className="font-semibold mb-1">Google Sheets Sync</p>
-                    <p>Connect to a real Google Sheet to collaborate. Requires a Google Cloud Project with Sheets API.</p>
+                    <p>Connect to a real Google Sheet to sync your data in real-time. Choose between:</p>
+                    <ul className="list-disc list-inside mt-1 ml-2 space-y-0.5">
+                      <li><strong>Managed Service:</strong> Use pre-configured credentials (requires environment variables)</li>
+                      <li><strong>Custom Config:</strong> Use your own Google Cloud Project credentials</li>
+                    </ul>
                   </div>
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Google Cloud Client ID</label>
-                <input
-                  type="text"
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:outline-none bg-white text-gray-900"
-                  placeholder="12345...apps.googleusercontent.com"
-                  value={config.clientId}
-                  onChange={e => setConfig({ ...config, clientId: e.target.value })}
-                />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                <input
-                  type="password"
-                  className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:outline-none bg-white text-gray-900"
-                  placeholder="AIza..."
-                  value={config.apiKey}
-                  onChange={e => setConfig({ ...config, apiKey: e.target.value })}
-                />
-              </div>
+              {(import.meta.env.VITE_GOOGLE_CLIENT_ID && import.meta.env.VITE_GOOGLE_API_KEY) && (
+                <div className="mb-4 p-1 bg-gray-100 rounded-lg flex text-sm">
+                  <button
+                    onClick={() => setUseServiceCreds(true)}
+                    className={`flex-1 py-1.5 px-3 rounded-md font-medium transition-all ${useServiceCreds ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Managed Service
+                  </button>
+                  <button
+                    onClick={() => {
+                      setUseServiceCreds(false);
+                      // Clear env var credentials when switching to Custom Config
+                      // Only keep Spreadsheet ID if it exists
+                      setConfig(prev => ({
+                        clientId: '',
+                        apiKey: '',
+                        spreadsheetId: prev.spreadsheetId
+                      }));
+                    }}
+                    className={`flex-1 py-1.5 px-3 rounded-md font-medium transition-all ${!useServiceCreds ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Custom Config
+                  </button>
+                </div>
+              )}
+
+              {useServiceCreds ? (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4 text-blue-800 text-sm flex items-center gap-2">
+                  <Shield size={18} className="shrink-0" />
+                  <div>
+                    <p className="font-semibold">Using Managed Credentials</p>
+                    <p className="text-xs opacity-80">Authentication is handled by the service. You only need to provide the Spreadsheet ID.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 mb-4 animate-fade-in">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Google Cloud Client ID</label>
+                    <input
+                      type="text"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:outline-none bg-white text-gray-900"
+                      placeholder="12345...apps.googleusercontent.com"
+                      value={config.clientId}
+                      onChange={e => setConfig({ ...config, clientId: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                    <input
+                      type="password"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:outline-none bg-white text-gray-900"
+                      placeholder="AIza..."
+                      value={config.apiKey}
+                      onChange={e => setConfig({ ...config, apiKey: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Spreadsheet ID</label>
@@ -851,7 +1085,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   value={config.spreadsheetId}
                   onChange={e => setConfig({ ...config, spreadsheetId: e.target.value })}
                 />
-                <p className="text-xs text-gray-400 mt-1">Found in the URL of your Google Sheet.</p>
+                <p className="text-xs text-green-400 mt-1">Found in the URL of your Google Sheet.</p>
               </div>
 
               <div className="pt-2 flex items-center justify-between">
@@ -867,6 +1101,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
               </div>
             </div>
+
 
             {/* Data Management Section - Only show when not connected */}
             {!isConnected && (
@@ -922,8 +1157,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               Save & Connect
             </button>
           </div>
-        </div>
-      </div>
+        </div >
+      </div >
     </>
   );
 };

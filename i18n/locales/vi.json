@@ -1,0 +1,366 @@
+{
+  "app": {
+    "name": "Tài Chính Gia Đình",
+    "loading": "Đang tải..."
+  },
+  "navigation": {
+    "home": "Trang Chủ",
+    "dashboard": "Tổng Quan",
+    "transactions": "Giao Dịch",
+    "goals": "Mục Tiêu & Ví",
+    "help": "Trợ Giúp & Hướng Dẫn",
+    "feedback": "Phản Hồi / Vấn Đề",
+    "settings": "Cài Đặt"
+  },
+  "header": {
+    "walletOverview": "Tổng Quan Ví",
+    "financialGoals": "Mục Tiêu Tài Chính",
+    "currency": "Tiền Tệ",
+    "selectCurrency": "Chọn Tiền Tệ",
+    "connect": "Kết Nối",
+    "reconnect": "Kết Nối Lại",
+    "signOut": "Đăng Xuất",
+    "guestUser": "Khách",
+    "signInToSync": "Đăng nhập để đồng bộ dữ liệu"
+  },
+  "sync": {
+    "saving": "Đang lưu...",
+    "syncing": "Đang đồng bộ...",
+    "syncError": "Lỗi Đồng Bộ",
+    "live": "Trực Tiếp",
+    "refreshData": "Làm Mới Dữ Liệu",
+    "refreshing": "Đang làm mới...",
+    "autoSaving": "Tự động lưu...",
+    "synced": "Đã đồng bộ",
+    "syncPaused": "Tạm Dừng Đồng Bộ:",
+    "sessionExpired": "Phiên đã hết hạn hoặc cần xác minh.",
+    "localStorageMode": "Chế Độ Lưu Trữ Cục Bộ:",
+    "dataSavedLocally": "Dữ liệu chỉ được lưu trên trình duyệt này.",
+    "reconnectNow": "Kết Nối Lại Ngay",
+    "connectCloud": "Kết Nối Cloud"
+  },
+  "landing": {
+    "title": "Quản Lý Tài Chính Gia Đình",
+    "subtitle": "Theo dõi chi tiêu, quản lý ngân sách và đạt được mục tiêu tài chính cùng nhau",
+    "getStarted": "Bắt Đầu",
+    "features": {
+      "title": "Tại Sao Chọn FamilyFinance?",
+      "tracking": {
+        "title": "Theo Dõi Chi Tiêu Thông Minh",
+        "description": "Ghi lại và phân loại tất cả chi tiêu gia đình ở một nơi"
+      },
+      "budgets": {
+        "title": "Quản Lý Ngân Sách",
+        "description": "Đặt ngân sách theo danh mục và theo dõi chi tiêu theo thời gian thực"
+      },
+      "goals": {
+        "title": "Mục Tiêu Tiết Kiệm",
+        "description": "Xác định mục tiêu tài chính và theo dõi tiến độ của bạn"
+      },
+      "sync": {
+        "title": "Đồng Bộ Cloud",
+        "description": "Đồng bộ dữ liệu trên các thiết bị bằng Google Sheets"
+      },
+      "insights": {
+        "title": "Phân Tích Trực Quan",
+        "description": "Biểu đồ và phân tích đẹp mắt để hiểu chi tiêu của bạn"
+      },
+      "family": {
+        "title": "Cộng Tác Gia Đình",
+        "description": "Theo dõi chi tiêu theo thành viên gia đình và chia sẻ quyền truy cập"
+      }
+    }
+  },
+  "setup": {
+    "welcome": "Chào Mừng Đến Với FamilyFinance",
+    "letsSetup": "Hãy thiết lập tài khoản của bạn",
+    "step": "Bước",
+    "of": "của",
+    "back": "Quay Lại",
+    "next": "Tiếp Theo",
+    "finish": "Hoàn Tất Thiết Lập",
+    "skipDemo": "Bỏ Qua & Dùng Dữ Liệu Demo",
+    "currency": {
+      "title": "Chọn Tiền Tệ Của Bạn",
+      "description": "Chọn tiền tệ chính cho các giao dịch",
+      "label": "Tiền Tệ"
+    },
+    "wallets": {
+      "title": "Thiết Lập Ví Của Bạn",
+      "description": "Tạo ví để tổ chức tiền của bạn",
+      "addWallet": "Thêm Ví",
+      "walletName": "Tên Ví",
+      "walletType": "Loại Ví",
+      "initialBalance": "Số Dư Ban Đầu",
+      "types": {
+        "main": "Ví Chính",
+        "savings": "Tiết Kiệm",
+        "investment": "Đầu Tư",
+        "cash": "Tiền Mặt"
+      }
+    },
+    "categories": {
+      "title": "Tùy Chỉnh Danh Mục",
+      "description": "Thêm hoặc sửa đổi danh mục chi tiêu và thu nhập",
+      "income": "Danh Mục Thu Nhập",
+      "expense": "Danh Mục Chi Tiêu"
+    },
+    "members": {
+      "title": "Thêm Thành Viên Gia Đình",
+      "description": "Ai sẽ sử dụng ứng dụng này?",
+      "addMember": "Thêm Thành Viên",
+      "memberName": "Tên Thành Viên"
+    },
+    "sync": {
+      "title": "Đồng Bộ Cloud (Tùy Chọn)",
+      "description": "Kết nối với Google Sheets để sao lưu và đồng bộ cloud",
+      "enableSync": "Bật Đồng Bộ Google Sheets",
+      "skipForNow": "Bỏ qua bây giờ",
+      "managedService": "Sử Dụng Dịch Vụ Được Quản Lý",
+      "customConfig": "Sử Dụng Cấu Hình Tùy Chỉnh",
+      "spreadsheetId": "ID Bảng Tính",
+      "clientId": "Google Client ID",
+      "apiKey": "Google API Key",
+      "connect": "Kết Nối Ngay",
+      "testConnection": "Kiểm Tra Kết Nối",
+      "importConfig": "Nhập Cấu Hình"
+    }
+  },
+  "settings": {
+    "title": "Cài Đặt Ứng Dụng",
+    "currency": {
+      "title": "Tùy Chọn Tiền Tệ",
+      "displayCurrency": "Hiển Thị Tiền Tệ",
+      "description": "Chọn ký hiệu tiền tệ chính cho các giao dịch của bạn."
+    },
+    "lists": {
+      "title": "Quản Lý Danh Sách",
+      "description": "Quản lý danh sách danh mục riêng cho Thu Nhập và Chi Tiêu.",
+      "synced": "Những danh mục này sẽ được đồng bộ với Google Sheet của bạn.",
+      "incomeCategories": "Danh Mục Thu Nhập",
+      "expenseCategories": "Danh Mục Chi Tiêu",
+      "familyMembers": "Thành Viên Gia Đình",
+      "noCategories": "Chưa có danh mục nào.",
+      "noMembers": "Chưa có thành viên nào.",
+      "selectOrType": "Chọn hoặc Nhập...",
+      "newExpense": "Chi Tiêu Mới...",
+      "newMember": "Thành Viên Mới...",
+      "changeColor": "Đổi Màu",
+      "pickColor": "Chọn Màu",
+      "editName": "Sửa Tên",
+      "finishEditing": "Hoàn Tất Chỉnh Sửa",
+      "deleteCategory": "Xóa Danh Mục",
+      "deleteMember": "Xóa Thành Viên",
+      "clickAgainToConfirm": "Nhấp lại để xác nhận xóa",
+      "memberExists": "Thành viên đã tồn tại",
+      "nameCannotBeEmpty": "Tên không được để trống"
+    },
+    "googleSheets": {
+      "title": "Tích Hợp Google Sheets",
+      "description": "Đồng bộ dữ liệu của bạn với Google Sheets để sao lưu và cộng tác.",
+      "connectedAs": "Đã kết nối với",
+      "notConnected": "Chưa kết nối",
+      "managedService": "Dịch Vụ Được Quản Lý",
+      "customConfig": "Cấu Hình Tùy Chỉnh",
+      "managedServiceDesc": "Sử dụng thông tin xác thực được cấu hình sẵn (khuyến nghị cho hầu hết người dùng)",
+      "customConfigDesc": "Cung cấp thông tin xác thực Google API của riêng bạn",
+      "spreadsheetId": "ID Bảng Tính",
+      "spreadsheetIdPlaceholder": "Nhập ID Google Spreadsheet của bạn",
+      "clientId": "Google Client ID",
+      "clientIdPlaceholder": "Google OAuth Client ID của bạn",
+      "apiKey": "Google API Key",
+      "apiKeyPlaceholder": "Google API Key của bạn",
+      "helpSetup": "Cần trợ giúp thiết lập?",
+      "viewGuide": "Xem Hướng Dẫn Thiết Lập",
+      "shareConfig": "Chia Sẻ Liên Kết Cấu Hình",
+      "exportConfig": "Xuất Cấu Hình",
+      "importConfig": "Nhập Cấu Hình",
+      "downloadTemplate": "Tải Mẫu",
+      "disconnect": "Ngắt Kết Nối",
+      "saveAndConnect": "Lưu & Kết Nối"
+    },
+    "dangerZone": {
+      "title": "Vùng Nguy Hiểm",
+      "resetData": "Đặt Lại Về Dữ Liệu Demo",
+      "resetDataDesc": "Thay thế tất cả dữ liệu bằng dữ liệu demo mẫu. Điều này sẽ ngắt kết nối Google Sync.",
+      "resetDataConfirm": "Nhấp lại để xác nhận đặt lại",
+      "clearData": "Xóa Tất Cả Dữ Liệu",
+      "clearDataDesc": "Xóa tất cả giao dịch, mục tiêu và ngân sách. Điều này sẽ ngắt kết nối Google Sync.",
+      "clearDataConfirm": "Nhấp lại để xác nhận xóa"
+    }
+  },
+  "home": {
+    "quickAdd": "Thêm Nhanh",
+    "todayTransactions": "Giao Dịch Hôm Nay",
+    "noTransactions": "Không có giao dịch hôm nay",
+    "addIncome": "Thêm Thu Nhập",
+    "addExpense": "Thêm Chi Tiêu",
+    "amount": "Số Tiền",
+    "description": "Mô Tả",
+    "category": "Danh Mục",
+    "member": "Thành Viên",
+    "wallet": "Ví",
+    "add": "Thêm"
+  },
+  "dashboard": {
+    "totalBalance": "Tổng Số Dư",
+    "thisMonth": "Tháng Này",
+    "income": "Thu Nhập",
+    "expenses": "Chi Tiêu",
+    "netSavings": "Tiết Kiệm Ròng",
+    "spendingByCategory": "Chi Tiêu Theo Danh Mục",
+    "spendingByMember": "Chi Tiêu Theo Thành Viên",
+    "monthlyTrend": "Xu Hướng Hàng Tháng",
+    "budgetOverview": "Tổng Quan Ngân Sách",
+    "noBudgets": "Chưa có ngân sách",
+    "addBudget": "Thêm Ngân Sách",
+    "spent": "Đã Chi",
+    "remaining": "Còn Lại",
+    "exceeded": "Vượt Quá"
+  },
+  "transactions": {
+    "title": "Giao Dịch",
+    "addTransaction": "Thêm Giao Dịch",
+    "addRecurring": "Thêm Định Kỳ",
+    "filters": "Bộ Lọc",
+    "search": "Tìm kiếm giao dịch...",
+    "all": "Tất Cả",
+    "type": "Loại",
+    "dateRange": "Khoảng Thời Gian",
+    "from": "Từ",
+    "to": "Đến",
+    "export": "Xuất",
+    "noTransactions": "Không tìm thấy giao dịch",
+    "date": "Ngày",
+    "description": "Mô Tả",
+    "category": "Danh Mục",
+    "member": "Thành Viên",
+    "amount": "Số Tiền",
+    "actions": "Hành Động",
+    "edit": "Sửa",
+    "delete": "Xóa",
+    "recurring": "Định Kỳ",
+    "transfer": "Chuyển Khoản"
+  },
+  "goals": {
+    "title": "Mục Tiêu Tài Chính",
+    "savingsGoals": "Mục Tiêu Tiết Kiệm",
+    "wallets": "Ví & Tài Khoản",
+    "addGoal": "Thêm Mục Tiêu",
+    "addWallet": "Thêm Ví",
+    "transfer": "Chuyển Khoản",
+    "noGoals": "Chưa có mục tiêu tiết kiệm",
+    "noWallets": "Chưa cấu hình ví",
+    "goalName": "Tên Mục Tiêu",
+    "targetAmount": "Số Tiền Mục Tiêu",
+    "currentAmount": "Số Tiền Hiện Tại",
+    "deadline": "Hạn Chót",
+    "progress": "Tiến Độ",
+    "completed": "Hoàn Thành",
+    "walletName": "Tên Ví",
+    "walletType": "Loại Ví",
+    "balance": "Số Dư",
+    "initialBalance": "Số Dư Ban Đầu"
+  },
+  "modal": {
+    "close": "Đóng",
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "confirm": "Xác Nhận",
+    "delete": "Xóa",
+    "edit": "Sửa",
+    "add": "Thêm"
+  },
+  "dialog": {
+    "confirmSignOut": "Xác Nhận Đăng Xuất",
+    "signOutMessage": "Bạn có chắc chắn muốn đăng xuất?\n\nTất cả dữ liệu của bạn sẽ được đồng bộ với Google Sheets và sau đó xóa khỏi thiết bị này. Bạn sẽ được chuyển hướng đến trang đích.",
+    "confirmDisconnect": "Xác Nhận Đăng Xuất",
+    "disconnectMessage": "Bạn có chắc chắn muốn ngắt kết nối khỏi Google Sheets?\n\nDữ liệu của bạn sẽ vẫn còn trong bộ nhớ cục bộ, nhưng đồng bộ trực tiếp sẽ dừng cho đến khi bạn kết nối lại.",
+    "connectionFailed": "Kết Nối Thất Bại",
+    "linkCopied": "Đã Sao Chép Liên Kết!",
+    "configLinkCopied": "Liên kết cấu hình đã được sao chép vào clipboard!\n\nGửi liên kết này cho các thành viên gia đình. Khi họ mở nó, ứng dụng sẽ tự động cấu hình nguồn dữ liệu.",
+    "missingConfiguration": "Thiếu Cấu Hình",
+    "fillConfigFields": "Vui lòng điền và lưu các trường cấu hình trước.",
+    "missingSpreadsheetId": "Thiếu ID Bảng Tính",
+    "enterSpreadsheetId": "Vui lòng nhập ID Bảng Tính của bạn trước.",
+    "managedServiceImported": "Đã Nhập Cấu Hình Dịch Vụ Được Quản Lý",
+    "managedServiceImportedMsg": "ID Bảng tính đã được nhập thành công!\n\nCấu hình này sử dụng thông tin xác thực Dịch vụ được quản lý. Đảm bảo các biến môi trường của bạn (VITE_GOOGLE_CLIENT_ID và VITE_GOOGLE_API_KEY) đã được đặt.\n\nNhấp \"Lưu & Kết Nối\" để áp dụng.",
+    "importSuccessful": "Nhập Thành Công",
+    "importSuccessfulMsg": "Cấu hình đã được nhập thành công!\n\nNhấp 'Lưu & Kết Nối' để áp dụng.",
+    "credentialsImported": "Đã nhập thông tin xác thực!\n\nVui lòng nhập ID Bảng tính của bạn theo cách thủ công, sau đó nhấp 'Lưu & Kết Nối'.",
+    "importFailed": "Nhập Thất Bại",
+    "importFailedMsg": "Không thể phân tích tệp cấu hình. Vui lòng cung cấp tệp cấu hình JSON hoặc .env hợp lệ.",
+    "invalidConfig": "Cấu Hình Không Hợp Lệ",
+    "missingCredentials": "Cấu hình thiếu thông tin xác thực bắt buộc (Client ID hoặc API Key).",
+    "error": "Lỗi",
+    "generateLinkFailed": "Không thể tạo liên kết.",
+    "success": "Thành Công",
+    "warning": "Cảnh Báo",
+    "info": "Thông Tin"
+  },
+  "help": {
+    "title": "Trợ Giúp & Hướng Dẫn",
+    "gettingStarted": "Bắt Đầu",
+    "googleSheets": "Thiết Lập Google Sheets",
+    "features": "Tính Năng",
+    "faq": "Câu Hỏi Thường Gặp"
+  },
+  "feedback": {
+    "title": "Phản Hồi / Vấn Đề",
+    "description": "Chúng tôi rất muốn nghe từ bạn! Báo cáo lỗi, yêu cầu tính năng hoặc chia sẻ suy nghĩ của bạn.",
+    "submit": "Gửi Phản Hồi"
+  },
+  "common": {
+    "loading": "Đang tải...",
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "delete": "Xóa",
+    "edit": "Sửa",
+    "add": "Thêm",
+    "close": "Đóng",
+    "confirm": "Xác Nhận",
+    "back": "Quay Lại",
+    "next": "Tiếp Theo",
+    "finish": "Hoàn Tất",
+    "skip": "Bỏ Qua",
+    "yes": "Có",
+    "no": "Không",
+    "ok": "OK",
+    "search": "Tìm Kiếm",
+    "filter": "Lọc",
+    "export": "Xuất",
+    "import": "Nhập",
+    "download": "Tải Xuống",
+    "upload": "Tải Lên",
+    "share": "Chia Sẻ",
+    "copy": "Sao Chép",
+    "copied": "Đã Sao Chép!",
+    "required": "Bắt Buộc",
+    "optional": "Tùy Chọn",
+    "all": "Tất Cả",
+    "none": "Không Có",
+    "other": "Khác"
+  },
+  "transactionTypes": {
+    "income": "Thu Nhập",
+    "expense": "Chi Tiêu",
+    "transfer": "Chuyển Khoản"
+  },
+  "recurrence": {
+    "none": "Không",
+    "daily": "Hàng Ngày",
+    "weekly": "Hàng Tuần",
+    "monthly": "Hàng Tháng",
+    "yearly": "Hàng Năm"
+  },
+  "errors": {
+    "required": "Trường này là bắt buộc",
+    "invalidAmount": "Vui lòng nhập số tiền hợp lệ",
+    "invalidDate": "Vui lòng nhập ngày hợp lệ",
+    "connectionFailed": "Kết nối thất bại. Vui lòng kiểm tra kết nối internet của bạn.",
+    "authenticationFailed": "Xác thực thất bại. Vui lòng thử lại.",
+    "permissionDenied": "Quyền bị từ chối. Vui lòng kiểm tra quyền truy cập của bạn.",
+    "notFound": "Không tìm thấy tài nguyên.",
+    "unknownError": "Đã xảy ra lỗi không xác định. Vui lòng thử lại."
+  }
+}

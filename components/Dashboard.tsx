@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Expense, CurrencyConfig, TransactionType, Budget, Wallet, SavingsGoal } from '../types';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line } from 'recharts';
-import { TrendingUp, TrendingDown, Minus, Calendar, Filter, CreditCard, Wallet as WalletIcon, AlertTriangle, ArrowRightLeft, Target, Edit, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Calendar, Filter, CreditCard, Wallet as WalletIcon, AlertTriangle, ArrowRightLeft, Target, Edit, Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import { formatCurrency, convertFromBase } from '../utils';
 import { DatePicker } from './DatePicker';
 import { BudgetModal } from './BudgetModal';
@@ -16,7 +16,7 @@ interface DashboardProps {
   onAddBudget?: (b: Budget) => void;
   onDeleteBudget?: (id: string) => void;
   onUpdateBudget?: (b: Budget) => void;
-  categoryItems?: any[]; 
+  categoryItems?: any[];
   wallets?: Wallet[];
   goals?: SavingsGoal[];
 }
@@ -25,10 +25,10 @@ const DEFAULT_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '
 
 type FilterType = 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'ALL' | 'CUSTOM';
 
-export const Dashboard: React.FC<DashboardProps> = ({ 
-  expenses, 
-  currencyConfig, 
-  categoryColors = {}, 
+export const Dashboard: React.FC<DashboardProps> = ({
+  expenses,
+  currencyConfig,
+  categoryColors = {},
   memberColors = {},
   budgets = [],
   onAddBudget,
@@ -41,6 +41,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [filterType, setFilterType] = useState<FilterType>('THIS_MONTH');
   const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
   // 1. Convert all base expenses to display currency first
   const displayExpenses = useMemo(() => {
@@ -78,7 +79,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         const currentDay = d.getDay(); // 0 is Sunday
         const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
         d.setDate(now.getDate() - distanceToMonday);
-        
+
         const monday = new Date(d);
         const sunday = new Date(d);
         sunday.setDate(monday.getDate() + 6);
@@ -130,12 +131,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // KPI Calculations (Based on Filtered Data)
   const totalSpending = useMemo(() => filteredExpensesOnly.reduce((sum, item) => sum + item.amount, 0), [filteredExpensesOnly]);
   const totalIncome = useMemo(() => filteredIncomeOnly.reduce((sum, item) => sum + item.amount, 0), [filteredIncomeOnly]);
-  
+
   // 6. Payment Method Breakdown logic for Net Balance Enhancement
   const spendingByMethod = useMemo(() => {
     let credit = 0;
     let cash = 0;
-    
+
     filteredExpensesOnly.forEach(e => {
       const method = e.paymentMethod?.toLowerCase() || '';
       // Identify credit card transactions
@@ -145,7 +146,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         cash += e.amount;
       }
     });
-    
+
     return { credit, cash };
   }, [filteredExpensesOnly]);
 
@@ -191,7 +192,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Daily Trend Data Calculation
   const dailyTrendData = useMemo(() => {
     const map = new Map<string, { date: string; income: number; expense: number }>();
-    
+
     filteredDisplayExpenses.forEach(e => {
       const date = e.date;
       if (!map.has(date)) {
@@ -222,7 +223,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
-    
+
     // Previous month logic
     const prevDate = new Date(currentYear, currentMonth - 1, 1);
     const prevMonth = prevDate.getMonth();
@@ -245,13 +246,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
 
     const diff = currentTotal - prevTotal;
-    const percentage = prevTotal === 0 
-      ? (currentTotal > 0 ? 100 : 0) 
+    const percentage = prevTotal === 0
+      ? (currentTotal > 0 ? 100 : 0)
       : (diff / prevTotal) * 100;
 
-    return { 
-      currentTotal, 
-      prevTotal, 
+    return {
+      currentTotal,
+      prevTotal,
       percentage,
       monthName: now.toLocaleString('default', { month: 'long' }),
       prevMonthName: prevDate.toLocaleString('default', { month: 'long' }),
@@ -270,7 +271,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     // Calculate spend per category for THIS MONTH regardless of dashboard filter
     const currentMonthSpend = new Map<string, number>();
-    
+
     allExpensesOnly.forEach(e => {
       const [y, m] = e.date.split('-').map(Number);
       if (y === currentYear && m - 1 === currentMonth) {
@@ -302,7 +303,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6 animate-fade-in">
-      
+
       {/* 1. Monthly Snapshot (Pinned Widget) */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -319,26 +320,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <span className="text-sm text-gray-500">spent so far</span>
             </div>
           </div>
-          
-          <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border ${
-            monthlyStats.percentage === 0 ? 'bg-gray-50 border-gray-200 text-gray-600' :
+
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border ${monthlyStats.percentage === 0 ? 'bg-gray-50 border-gray-200 text-gray-600' :
             monthlyStats.isIncrease ? 'bg-red-50 border-red-100 text-red-700' : 'bg-green-50 border-green-100 text-green-700'
-          }`}>
-             {monthlyStats.percentage === 0 ? (
-                <Minus size={24} />
-             ) : monthlyStats.isIncrease ? (
-                <TrendingUp size={24} />
-             ) : (
-                <TrendingDown size={24} />
-             )}
-             <div>
-               <p className="text-sm font-bold">
-                 {Math.abs(monthlyStats.percentage).toFixed(1)}% {monthlyStats.isIncrease ? 'Higher' : 'Lower'}
-               </p>
-               <p className="text-xs opacity-80">
-                 vs {monthlyStats.prevMonthName} ({formatValue(monthlyStats.prevTotal)})
-               </p>
-             </div>
+            }`}>
+            {monthlyStats.percentage === 0 ? (
+              <Minus size={24} />
+            ) : monthlyStats.isIncrease ? (
+              <TrendingUp size={24} />
+            ) : (
+              <TrendingDown size={24} />
+            )}
+            <div>
+              <p className="text-sm font-bold">
+                {Math.abs(monthlyStats.percentage).toFixed(1)}% {monthlyStats.isIncrease ? 'Higher' : 'Lower'}
+              </p>
+              <p className="text-xs opacity-80">
+                vs {monthlyStats.prevMonthName} ({formatValue(monthlyStats.prevTotal)})
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -347,104 +347,103 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Wallet & Goals Overview Widget */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-4">
-             <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-               <WalletIcon size={20} className="text-green-600" />
-               Wallets & Goals
-             </h3>
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <WalletIcon size={20} className="text-green-600" />
+              Wallets & Goals
+            </h3>
           </div>
-          
-          <div className="space-y-3 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
-             {/* Wallets Section */}
-             {wallets.length === 0 ? (
-                 <p className="text-sm text-gray-400">No wallets found.</p>
-             ) : (
-                wallets.map(w => (
-                   <div key={w.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
-                      <div>
-                         <p className="font-semibold text-gray-800 text-sm">{w.name}</p>
-                         <p className="text-xs text-gray-500 capitalize">{w.type.toLowerCase()}</p>
-                      </div>
-                      <p className={`font-bold font-mono ${w.balance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                         {formatCurrency(w.balance, currencyConfig)}
-                      </p>
-                   </div>
-                ))
-             )}
 
-             {/* Goals Section */}
-             {goals.length > 0 && (
-                <>
-                  <div className="pt-2 pb-1 text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                    <Target size={12} /> Savings Goals
+          <div className="space-y-3 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
+            {/* Wallets Section */}
+            {wallets.length === 0 ? (
+              <p className="text-sm text-gray-400">No wallets found.</p>
+            ) : (
+              wallets.map(w => (
+                <div key={w.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                  <div>
+                    <p className="font-semibold text-gray-800 text-sm">{w.name}</p>
+                    <p className="text-xs text-gray-500 capitalize">{w.type.toLowerCase()}</p>
                   </div>
-                  {goals.map(g => (
-                    <div key={g.id} className="flex justify-between items-center p-3 bg-blue-50/50 rounded-lg border border-blue-100">
-                        <div className="flex items-center gap-2">
-                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: g.color }}></div>
-                           <div>
-                              <p className="font-semibold text-gray-800 text-sm">{g.name}</p>
-                              <p className="text-xs text-gray-500">Target: {formatCurrency(g.targetAmount, currencyConfig)}</p>
-                           </div>
-                        </div>
-                        <p className="font-bold font-mono text-gray-900">
-                           {formatCurrency(g.currentAmount, currencyConfig)}
-                        </p>
+                  <p className={`font-bold font-mono ${w.balance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    {formatCurrency(w.balance, currencyConfig)}
+                  </p>
+                </div>
+              ))
+            )}
+
+            {/* Goals Section */}
+            {goals.length > 0 && (
+              <>
+                <div className="pt-2 pb-1 text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                  <Target size={12} /> Savings Goals
+                </div>
+                {goals.map(g => (
+                  <div key={g.id} className="flex justify-between items-center p-3 bg-blue-50/50 rounded-lg border border-blue-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: g.color }}></div>
+                      <div>
+                        <p className="font-semibold text-gray-800 text-sm">{g.name}</p>
+                        <p className="text-xs text-gray-500">Target: {formatCurrency(g.targetAmount, currencyConfig)}</p>
+                      </div>
                     </div>
-                  ))}
-                </>
-             )}
+                    <p className="font-bold font-mono text-gray-900">
+                      {formatCurrency(g.currentAmount, currencyConfig)}
+                    </p>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
         {/* Budget Widget */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-4">
-             <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-               <Target size={20} className="text-purple-500" />
-               Monthly Budgets
-             </h3>
-             <button 
-               onClick={() => setIsBudgetModalOpen(true)}
-               className="text-xs font-medium text-purple-600 hover:bg-purple-50 px-2 py-1 rounded transition-colors flex items-center gap-1"
-             >
-               <Edit size={12} /> Manage
-             </button>
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <Target size={20} className="text-purple-500" />
+              Monthly Budgets
+            </h3>
+            <button
+              onClick={() => setIsBudgetModalOpen(true)}
+              className="text-xs font-medium text-purple-600 hover:bg-purple-50 px-2 py-1 rounded transition-colors flex items-center gap-1"
+            >
+              <Edit size={12} /> Manage
+            </button>
           </div>
-          
+
           {budgetStats.length === 0 ? (
-             <div className="text-center py-6 text-gray-400 text-sm bg-gray-50 rounded-lg">
-               No budgets set. Click "Manage" to start tracking.
-             </div>
+            <div className="text-center py-6 text-gray-400 text-sm bg-gray-50 rounded-lg">
+              No budgets set. Click "Manage" to start tracking.
+            </div>
           ) : (
-             <div className="space-y-3 max-h-[160px] overflow-y-auto custom-scrollbar pr-2">
-               {budgetStats.map(b => (
-                  <div key={b.id} className="border border-gray-100 rounded-lg p-3 hover:border-gray-300 transition-colors">
-                     <div className="flex justify-between items-end mb-1">
-                        <span className="font-medium text-sm text-gray-700">{b.category}</span>
-                        <span className="text-xs text-gray-500">
-                          <span className={`font-bold ${b.spend > b.limitDisplay ? 'text-red-600' : 'text-gray-800'}`}>
-                            {formatValue(b.spend)}
-                          </span> / {formatValue(b.limitDisplay)}
-                        </span>
-                     </div>
-                     <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full transition-all duration-1000 ${
-                             b.percent > 100 ? 'bg-red-500' : 
-                             b.percent > 75 ? 'bg-yellow-400' : 
-                             'bg-green-500'
-                          }`} 
-                          style={{ width: `${Math.min(b.percent, 100)}%` }}
-                        ></div>
-                     </div>
-                     {b.percent > 100 && (
-                       <div className="mt-1 text-[10px] text-red-600 font-medium flex items-center gap-1">
-                          <AlertTriangle size={10} /> Over budget by {formatValue(b.spend - b.limitDisplay)}
-                       </div>
-                     )}
+            <div className="space-y-3 max-h-[160px] overflow-y-auto custom-scrollbar pr-2">
+              {budgetStats.map(b => (
+                <div key={b.id} className="border border-gray-100 rounded-lg p-3 hover:border-gray-300 transition-colors">
+                  <div className="flex justify-between items-end mb-1">
+                    <span className="font-medium text-sm text-gray-700">{b.category}</span>
+                    <span className="text-xs text-gray-500">
+                      <span className={`font-bold ${b.spend > b.limitDisplay ? 'text-red-600' : 'text-gray-800'}`}>
+                        {formatValue(b.spend)}
+                      </span> / {formatValue(b.limitDisplay)}
+                    </span>
                   </div>
-               ))}
-             </div>
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-1000 ${b.percent > 100 ? 'bg-red-500' :
+                        b.percent > 75 ? 'bg-yellow-400' :
+                          'bg-green-500'
+                        }`}
+                      style={{ width: `${Math.min(b.percent, 100)}%` }}
+                    ></div>
+                  </div>
+                  {b.percent > 100 && (
+                    <div className="mt-1 text-[10px] text-red-600 font-medium flex items-center gap-1">
+                      <AlertTriangle size={10} /> Over budget by {formatValue(b.spend - b.limitDisplay)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -456,36 +455,34 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <Filter size={18} className="text-gray-400" />
           <span className="text-sm font-medium text-gray-700">Analysis Period:</span>
         </div>
-        
+
         <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
           {(['TODAY', 'THIS_WEEK', 'THIS_MONTH', 'LAST_MONTH', 'THIS_YEAR', 'ALL'] as FilterType[]).map((type) => (
-             <button
-               key={type}
-               onClick={() => setFilterType(type)}
-               className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                 filterType === type 
-                   ? 'bg-blue-600 text-white shadow-sm' 
-                   : 'text-gray-600 hover:bg-gray-100'
-               }`}
-             >
-               {type === 'TODAY' ? 'Today' :
+            <button
+              key={type}
+              onClick={() => setFilterType(type)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === type
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-100'
+                }`}
+            >
+              {type === 'TODAY' ? 'Today' :
                 type === 'THIS_WEEK' ? 'This Week' :
-                type === 'THIS_MONTH' ? 'This Month' : 
-                type === 'LAST_MONTH' ? 'Last Month' : 
-                type === 'THIS_YEAR' ? 'This Year' : 'All Time'}
-             </button>
+                  type === 'THIS_MONTH' ? 'This Month' :
+                    type === 'LAST_MONTH' ? 'Last Month' :
+                      type === 'THIS_YEAR' ? 'This Year' : 'All Time'}
+            </button>
           ))}
-          
+
           <button
-             onClick={() => setFilterType('CUSTOM')}
-             className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
-               filterType === 'CUSTOM' 
-                 ? 'bg-blue-600 text-white shadow-sm' 
-                 : 'text-gray-600 hover:bg-gray-100'
-             }`}
-           >
-             Custom
-           </button>
+            onClick={() => setFilterType('CUSTOM')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'CUSTOM'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-gray-600 hover:bg-gray-100'
+              }`}
+          >
+            Custom
+          </button>
         </div>
       </div>
 
@@ -493,19 +490,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {filterType === 'CUSTOM' && (
         <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-lg border border-gray-200 animate-in slide-in-from-top-2">
           <div className="flex flex-col gap-1 w-full sm:w-auto">
-             <label className="text-xs text-gray-500">From</label>
-             <DatePicker 
-               value={customDateRange.start}
-               onChange={(date) => setCustomDateRange({...customDateRange, start: date})}
-             />
+            <label className="text-xs text-gray-500">From</label>
+            <DatePicker
+              value={customDateRange.start}
+              onChange={(date) => setCustomDateRange({ ...customDateRange, start: date })}
+            />
           </div>
           <span className="text-gray-400 pt-4">-</span>
-           <div className="flex flex-col gap-1 w-full sm:w-auto">
-             <label className="text-xs text-gray-500">To</label>
-             <DatePicker 
-               value={customDateRange.end}
-               onChange={(date) => setCustomDateRange({...customDateRange, end: date})}
-             />
+          <div className="flex flex-col gap-1 w-full sm:w-auto">
+            <label className="text-xs text-gray-500">To</label>
+            <DatePicker
+              value={customDateRange.end}
+              onChange={(date) => setCustomDateRange({ ...customDateRange, end: date })}
+            />
           </div>
         </div>
       )}
@@ -518,20 +515,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <p className="text-2xl font-bold text-green-600 mt-2">{formatValue(totalIncome)}</p>
           <p className="text-xs text-gray-400 mt-1">{filteredIncomeOnly.length} transactions</p>
         </div>
-        
+
         {/* Card 2: Expenses */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wide">Filtered Expenses</h3>
           <p className="text-2xl font-bold text-red-600 mt-2">{formatValue(totalSpending)}</p>
           <div className="mt-3 pt-3 border-t border-gray-50 flex flex-col gap-1.5">
-             <div className="flex items-center justify-between text-xs text-gray-600">
-                <span className="flex items-center gap-1.5"><WalletIcon size={12} className="text-gray-400" /> Cash</span>
-                <span className="font-medium">{formatValue(spendingByMethod.cash)}</span>
-             </div>
-             <div className="flex items-center justify-between text-xs text-gray-600">
-                <span className="flex items-center gap-1.5"><CreditCard size={12} className="text-purple-400" /> Credit</span>
-                <span className="font-medium text-purple-600">{formatValue(spendingByMethod.credit)}</span>
-             </div>
+            <div className="flex items-center justify-between text-xs text-gray-600">
+              <span className="flex items-center gap-1.5"><WalletIcon size={12} className="text-gray-400" /> Cash</span>
+              <span className="font-medium">{formatValue(spendingByMethod.cash)}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-gray-600">
+              <span className="flex items-center gap-1.5"><CreditCard size={12} className="text-purple-400" /> Credit</span>
+              <span className="font-medium text-purple-600">{formatValue(spendingByMethod.credit)}</span>
+            </div>
           </div>
         </div>
 
@@ -542,13 +539,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Accrual</span>
           </h3>
           <p className={`text-2xl font-bold mt-2 ${netBalance >= 0 ? 'text-gray-800' : 'text-red-600'}`}>
-             {formatValue(netBalance)}
+            {formatValue(netBalance)}
           </p>
           <div className="mt-2 w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-             <div 
-               className={`h-full transition-all duration-500 ${netBalance >= 0 ? 'bg-gray-600' : 'bg-red-500'}`} 
-               style={{ width: `${Math.min(Math.abs(savingsRate), 100)}%` }}
-             ></div>
+            <div
+              className={`h-full transition-all duration-500 ${netBalance >= 0 ? 'bg-gray-600' : 'bg-red-500'}`}
+              style={{ width: `${Math.min(Math.abs(savingsRate), 100)}%` }}
+            ></div>
           </div>
           <p className="text-xs text-gray-400 mt-1">
             {netBalance >= 0 ? `${savingsRate.toFixed(1)}% savings rate` : 'Overspending'}
@@ -557,30 +554,30 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Card 4: Cash Flow (Realized) - The Nuanced Analysis */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
-           <div className="flex justify-between items-start">
-             <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wide">Est. Cash Flow</h3>
-             {cashFlow < 0 && netBalance > 0 && (
-                <div className="text-amber-500" title="Low Liquidity Warning">
-                   <AlertTriangle size={16} />
-                </div>
-             )}
-           </div>
-           
-           <p className={`text-2xl font-bold mt-2 ${cashFlow >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-             {formatValue(cashFlow)}
-           </p>
-           
-           <div className="mt-3 pt-3 border-t border-gray-50">
-             <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-500">Credit Float:</span>
-                <span className="font-bold text-purple-600">+{formatValue(spendingByMethod.credit)}</span>
-             </div>
-             {cashFlow > 0 && netBalance < 0 && (
-                <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 inline-flex items-center gap-1">
-                   <ArrowRightLeft size={10} /> Debt Accumulating
-                </div>
-             )}
-           </div>
+          <div className="flex justify-between items-start">
+            <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wide">Est. Cash Flow</h3>
+            {cashFlow < 0 && netBalance > 0 && (
+              <div className="text-amber-500" title="Low Liquidity Warning">
+                <AlertTriangle size={16} />
+              </div>
+            )}
+          </div>
+
+          <p className={`text-2xl font-bold mt-2 ${cashFlow >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+            {formatValue(cashFlow)}
+          </p>
+
+          <div className="mt-3 pt-3 border-t border-gray-50">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Credit Float:</span>
+              <span className="font-bold text-purple-600">+{formatValue(spendingByMethod.credit)}</span>
+            </div>
+            {cashFlow > 0 && netBalance < 0 && (
+              <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 inline-flex items-center gap-1">
+                <ArrowRightLeft size={10} /> Debt Accumulating
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -597,47 +594,47 @@ export const Dashboard: React.FC<DashboardProps> = ({
               margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-              <XAxis 
-                dataKey="displayDate" 
-                tickLine={false} 
-                axisLine={false} 
-                tick={{ fontSize: 12, fill: '#6b7280' }} 
+              <XAxis
+                dataKey="displayDate"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 12, fill: '#6b7280' }}
                 dy={10}
               />
-              <YAxis 
-                tickLine={false} 
-                axisLine={false} 
-                tick={{ fontSize: 12, fill: '#6b7280' }} 
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 12, fill: '#6b7280' }}
                 tickFormatter={(value) => `${currencyConfig.symbol}${value}`}
               />
-              <Tooltip 
+              <Tooltip
                 formatter={(value: number) => formatValue(value)}
                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
               />
               <Legend verticalAlign="top" height={36} />
-              <Line 
-                type="monotone" 
-                dataKey="income" 
-                name="Income" 
-                stroke="#10B981" 
-                strokeWidth={3} 
-                dot={{ r: 3, strokeWidth: 0, fill: '#10B981' }} 
-                activeDot={{ r: 6 }} 
+              <Line
+                type="monotone"
+                dataKey="income"
+                name="Income"
+                stroke="#10B981"
+                strokeWidth={3}
+                dot={{ r: 3, strokeWidth: 0, fill: '#10B981' }}
+                activeDot={{ r: 6 }}
               />
-              <Line 
-                type="monotone" 
-                dataKey="expense" 
-                name="Expense" 
-                stroke="#EF4444" 
-                strokeWidth={3} 
-                dot={{ r: 3, strokeWidth: 0, fill: '#EF4444' }} 
-                activeDot={{ r: 6 }} 
+              <Line
+                type="monotone"
+                dataKey="expense"
+                name="Expense"
+                stroke="#EF4444"
+                strokeWidth={3}
+                dot={{ r: 3, strokeWidth: 0, fill: '#EF4444' }}
+                activeDot={{ r: 6 }}
               />
             </LineChart>
           </ResponsiveContainer>
         ) : (
           <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-             No trend data available for this period.
+            No trend data available for this period.
           </div>
         )}
       </div>
@@ -654,7 +651,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={categoryData}
+                        data={categoryData.filter(item => !collapsedCategories.has(item.name))}
                         cx="50%"
                         cy="50%"
                         innerRadius={60}
@@ -662,50 +659,92 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         paddingAngle={2}
                         dataKey="value"
                       >
-                        {categoryData.map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill={categoryColors[entry.name] || DEFAULT_COLORS[index % DEFAULT_COLORS.length]} 
-                          />
-                        ))}
+                        {categoryData.filter(item => !collapsedCategories.has(item.name)).map((entry, index) => {
+                          const originalIndex = categoryData.findIndex(cat => cat.name === entry.name);
+                          return (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={categoryColors[entry.name] || DEFAULT_COLORS[originalIndex % DEFAULT_COLORS.length]}
+                            />
+                          );
+                        })}
                       </Pie>
                       <Tooltip formatter={(value: number) => formatValue(value)} />
                     </PieChart>
                   </ResponsiveContainer>
                   {/* Center Text for Total */}
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                     <div className="text-center">
-                       <p className="text-xs text-gray-400 font-medium uppercase">Total</p>
-                       <p className="text-lg font-bold text-gray-700">{formatValue(totalSpending)}</p>
-                     </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400 font-medium uppercase">
+                        {collapsedCategories.size > 0 ? 'Visible' : 'Total'}
+                      </p>
+                      <p className="text-lg font-bold text-gray-700">
+                        {formatValue(
+                          categoryData
+                            .filter(item => !collapsedCategories.has(item.name))
+                            .reduce((sum, item) => sum + item.value, 0)
+                        )}
+                      </p>
+                      {collapsedCategories.size > 0 && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {collapsedCategories.size} hidden
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
-                
-                {/* Detailed List */}
-                <div className="mt-4 flex-shrink-0 space-y-2 overflow-y-auto max-h-[200px] custom-scrollbar pr-2">
+
+                {/* Detailed List with Toggle */}
+                <div className="mt-4 flex-shrink-0 space-y-1 overflow-y-auto max-h-[200px] custom-scrollbar pr-2">
                   {categoryData.map((item, index) => {
-                     const color = categoryColors[item.name] || DEFAULT_COLORS[index % DEFAULT_COLORS.length];
-                     return (
-                      <div key={item.name} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 text-sm border-b border-gray-50 last:border-0">
-                        <div className="flex items-center gap-3">
-                           <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }}></span>
-                           <span className="text-gray-700 font-medium">{item.name}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                           <span className="font-semibold text-gray-900">{formatValue(item.value)}</span>
-                           <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full min-w-[3rem] text-center">
-                             {(totalSpending > 0 ? (item.value / totalSpending) * 100 : 0).toFixed(1)}%
-                           </span>
-                        </div>
+                    const color = categoryColors[item.name] || DEFAULT_COLORS[index % DEFAULT_COLORS.length];
+                    const isCollapsed = collapsedCategories.has(item.name);
+
+                    const toggleCategory = () => {
+                      setCollapsedCategories(prev => {
+                        const newSet = new Set(prev);
+                        if (newSet.has(item.name)) {
+                          newSet.delete(item.name);
+                        } else {
+                          newSet.add(item.name);
+                        }
+                        return newSet;
+                      });
+                    };
+
+                    return (
+                      <div key={item.name} className="rounded border border-gray-100 overflow-hidden hover:border-gray-300 transition-colors">
+                        <button
+                          onClick={toggleCategory}
+                          className="w-full flex items-center justify-between p-2 hover:bg-gray-50 text-sm transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}
+                            >
+                              <ChevronRight size={14} className="text-gray-400" />
+                            </span>
+                            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }}></span>
+                            <span className="text-gray-700 font-medium">{item.name}</span>
+                          </div>
+                          {!isCollapsed && (
+                            <div className="flex items-center gap-3">
+                              <span className="font-semibold text-gray-900">{formatValue(item.value)}</span>
+                              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full min-w-[3rem] text-center">
+                                {(totalSpending > 0 ? (item.value / totalSpending) * 100 : 0).toFixed(1)}%
+                              </span>
+                            </div>
+                          )}
+                        </button>
                       </div>
                     );
                   })}
                 </div>
               </>
             ) : (
-               <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-                 No expenses found for this period.
-               </div>
+              <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                No expenses found for this period.
+              </div>
             )}
           </div>
         </div>
@@ -725,15 +764,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <Tooltip formatter={(value: number) => formatValue(value)} />
                 <Legend />
                 <Bar dataKey="value" name="Amount Spent" radius={[4, 4, 0, 0]}>
-                    {memberData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={memberColors[entry.name] || '#EF4444'} />
-                    ))}
+                  {memberData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={memberColors[entry.name] || '#EF4444'} />
+                  ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : (
             <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-               No data available.
+              No data available.
             </div>
           )}
         </div>
@@ -758,12 +797,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </ResponsiveContainer>
         ) : (
           <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-             No data available.
+            No data available.
           </div>
         )}
       </div>
 
-      <BudgetModal 
+      <BudgetModal
         isOpen={isBudgetModalOpen}
         onClose={() => setIsBudgetModalOpen(false)}
         budgets={budgets}

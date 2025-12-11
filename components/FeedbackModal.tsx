@@ -32,11 +32,11 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          access_key: '2a414011-70dc-425e-8444-fbe626c73b54',
+          access_key: import.meta.env.VITE_WEB3FORMS_ACCESS_KEY,
           name: formData.name,
           email: formData.email,
           message: formData.message,
-          subject: 'New Feedback from FamilyFinance App'
+          subject: 'New Feedback from Simple Family Finance App'
         })
       });
 
