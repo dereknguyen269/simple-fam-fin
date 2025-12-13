@@ -1176,6 +1176,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
           </div>
 
+          {/* Privacy & Permissions Explanation */}
+          {!isConnected && (
+            <div className="mx-6 mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <Shield className="text-blue-600" size={18} />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-2">🔒 Privacy & Permissions</h4>
+                  <p className="text-xs text-blue-800 mb-3">
+                    SimpleFamFin needs the following permissions to work:
+                  </p>
+                  <ul className="text-xs text-blue-800 space-y-2 mb-3">
+                    <li className="flex items-start gap-2">
+                      <span className="shrink-0 mt-0.5">✓</span>
+                      <span><strong>Google Sheets access:</strong> To sync your transactions and financial data</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="shrink-0 mt-0.5">✓</span>
+                      <span><strong>Email address:</strong> To identify your account</span>
+                    </li>
+                  </ul>
+                  <div className="bg-white/60 rounded p-2 border border-blue-200">
+                    <p className="text-xs text-blue-900 font-medium">
+                      🛡️ We never share your data with third parties. All data stays between you and your Google Sheets.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end gap-2">
             <button
               onClick={onClose}
