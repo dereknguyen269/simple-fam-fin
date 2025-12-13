@@ -37,7 +37,21 @@
     "localStorageMode": "Chế Độ Lưu Trữ Cục Bộ:",
     "dataSavedLocally": "Dữ liệu chỉ được lưu trên trình duyệt này.",
     "reconnectNow": "Kết Nối Lại Ngay",
-    "connectCloud": "Kết Nối Cloud"
+    "connectCloud": "Kết Nối Cloud",
+    "reconnectModal": {
+      "title": "Yêu Cầu Kết Nối",
+      "subtitle": "Đồng bộ đã bị tạm dừng",
+      "errorTitle": "Xác Thực Đã Hết Hạn",
+      "errorMessage": "Phiên của bạn đã hết hạn. Vui lòng kết nối lại để tiếp tục sử dụng ứng dụng.",
+      "step1": "Nhấp \"Kết Nối Lại Ngay\" để xác thực với Google",
+      "step2": "Dữ liệu của bạn sẽ được đồng bộ tự động",
+      "step3": "Tiếp tục sử dụng ứng dụng một cách liền mạch",
+      "reconnecting": "Đang kết nối lại...",
+      "dataSafe": "Dữ liệu cục bộ của bạn an toàn và sẽ được đồng bộ sau khi kết nối lại",
+      "or": "HOẶC",
+      "startFresh": "Bắt Đầu Lại",
+      "startFreshWarning": "Điều này sẽ xóa tất cả dữ liệu cục bộ và khởi động lại ứng dụng"
+    }
   },
   "landing": {
     "title": "Quản Lý Tài Chính Gia Đình",

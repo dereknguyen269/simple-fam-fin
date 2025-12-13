@@ -33,6 +33,22 @@ const safeEvaluate = (str: string) => {
   }
 };
 
+// Format number with thousand separator (e.g., 20000 → 20,000)
+const formatNumberWithSeparator = (value: string | number): string => {
+  if (value === '' || value === null || value === undefined) return '';
+
+  const numStr = String(value);
+  const parts = numStr.split('.');
+  const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  return parts.length > 1 ? `${integerPart}.${parts[1]}` : integerPart;
+};
+
+// Parse formatted number back to plain number string (e.g., 20,000 → 20000)
+const parseFormattedNumber = (formatted: string): string => {
+  return formatted.replace(/,/g, '');
+};
+
 export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   isOpen,
   onClose,
@@ -86,7 +102,10 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       // Only reset form when:
       // 1. Modal just opened (isOpen changed)
       // 2. Editing a different expense (expenseToEdit.id changed)
-      const currentExpenseId = expenseToEdit?.id;
+      // 3. Switching between edit mode and add mode
+
+      // Use a special marker for add mode to distinguish from edit mode
+      const currentExpenseId = expenseToEdit?.id ?? '__ADD_MODE__';
       const shouldReset = lastExpenseId !== currentExpenseId;
 
       if (shouldReset) {
@@ -127,10 +146,9 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
         setShowConfirmClose(false);
         setLastExpenseId(currentExpenseId);
       }
-    } else {
-      // Reset tracking when modal closes
-      setLastExpenseId(undefined);
     }
+    // Note: Don't reset lastExpenseId when modal closes
+    // This allows us to detect mode changes when reopening
   }, [isOpen, expenseToEdit?.id]);
 
   // When type changes, ensure category is valid for that type
@@ -285,13 +303,13 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   const paymentMethodOptions = PAYMENT_METHODS.map(p => ({ value: p, label: p }));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4 animate-fade-in">
+      <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <div className={`p-2 rounded-lg ${headerIconBg}`}>
-              <ThemeIcon size={20} />
+        <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-shrink-0">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+            <div className={`p-1.5 sm:p-2 rounded-lg ${headerIconBg}`}>
+              <ThemeIcon size={18} className="sm:w-5 sm:h-5" />
             </div>
             {isEditMode
               ? (isIncome ? 'Edit Income' : 'Edit Expense')
@@ -300,21 +318,21 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
           </h2>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1 rounded-full transition-colors"
+            className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-full transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
           >
-            <X size={24} />
+            <X size={22} />
           </button>
         </div>
 
         {/* Form */}
-        <div className="p-6 overflow-y-auto custom-scrollbar">
-          <form id="expense-form" onSubmit={handleSubmit} className="space-y-5">
+        <div className="flex-1 p-4 sm:p-6 overflow-y-auto custom-scrollbar pb-24 sm:pb-6">
+          <form id="expense-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
 
             {/* Type Switcher Segmented Control */}
             <div className="flex bg-gray-100 p-1 rounded-lg">
               <button
                 type="button"
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${!isIncome
+                className={`flex-1 py-3 sm:py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 min-h-[44px] ${!isIncome
                   ? 'bg-white text-red-600 shadow-sm ring-1 ring-black/5'
                   : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
                   }`}
@@ -325,7 +343,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               </button>
               <button
                 type="button"
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${isIncome
+                className={`flex-1 py-3 sm:py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 min-h-[44px] ${isIncome
                   ? 'bg-white text-green-600 shadow-sm ring-1 ring-black/5'
                   : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
                   }`}
@@ -365,11 +383,20 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                 </button>
               </div>
 
+
               {showCalculator ? (
                 <div className="animate-in fade-in slide-in-from-top-2">
                   {/* Calc Display */}
                   <div className={`w-full bg-white/60 p-3 rounded-lg text-right text-2xl font-mono font-bold tracking-wider mb-3 overflow-x-auto whitespace-nowrap border ${isIncome ? 'border-green-200 text-green-900' : 'border-red-200 text-red-900'}`}>
-                    {calcExpression || '0'}
+                    {(() => {
+                      // Format the display: show formatted number if it's just a number, otherwise show expression as-is
+                      const expr = calcExpression || '0';
+                      // Check if expression is just a number (no operators)
+                      if (/^[\d.]+$/.test(expr)) {
+                        return formatNumberWithSeparator(expr);
+                      }
+                      return expr;
+                    })()}
                   </div>
 
                   {/* Calc Grid */}
@@ -402,15 +429,20 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                 <div className="relative flex items-center justify-center text-center">
                   <span className={`text-3xl font-bold mr-2 ${amountSymbolClass}`}>{currencyConfig.symbol}</span>
                   <input
-                    type="number"
-                    step={step}
+                    type="text"
+                    inputMode="decimal"
                     required={!showCalculator}
                     placeholder={placeholder}
                     className={`bg-transparent text-4xl font-bold w-48 text-center border-b-2 outline-none transition-colors ${amountInputClass}`}
-                    value={formData.amount}
+                    value={formatNumberWithSeparator(formData.amount || '')}
                     onChange={e => {
                       const val = e.target.value;
-                      setFormData({ ...formData, amount: val === '' ? '' : val })
+                      // Remove commas for storage
+                      const parsed = parseFormattedNumber(val);
+                      // Validate: only allow numbers and one decimal point
+                      if (parsed === '' || /^\d*\.?\d*$/.test(parsed)) {
+                        setFormData({ ...formData, amount: parsed === '' ? '' : parsed });
+                      }
                     }}
                     onBlur={handleAmountBlur}
                     autoFocus
@@ -514,19 +546,19 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
           </form>
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+        {/* Footer - Fixed on mobile for better accessibility */}
+        <div className="fixed sm:relative bottom-0 left-0 right-0 p-4 sm:p-4 border-t border-gray-100 bg-white sm:bg-gray-50 flex justify-end gap-3 flex-shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] sm:shadow-none z-10">
           <button
             type="button"
             onClick={handleClose}
-            className="px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-lg transition-colors"
+            className="px-4 sm:px-5 py-3 sm:py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-lg transition-colors min-h-[48px] sm:min-h-0"
           >
             Cancel
           </button>
           <button
             type="submit"
             form="expense-form"
-            className={`px-5 py-2.5 text-sm font-medium text-white rounded-lg shadow-sm hover:shadow flex items-center gap-2 transition-all transform active:scale-95 ${saveButtonClass}`}
+            className={`flex-1 sm:flex-none px-5 py-3 sm:py-2.5 text-sm font-medium text-white rounded-lg shadow-sm hover:shadow flex items-center justify-center gap-2 transition-all transform active:scale-95 min-h-[48px] sm:min-h-0 ${saveButtonClass}`}
           >
             <Save size={18} />
             {isEditMode ? 'Update' : 'Save'} {isIncome ? 'Income' : 'Expense'}

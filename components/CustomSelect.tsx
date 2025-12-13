@@ -161,11 +161,35 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     if (disabled) return;
     if (!isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      const dropdownHeight = Math.min(options.length * 40 + 60, 350); // Account for search bar
+      const isMobile = window.innerWidth < 640; // sm breakpoint
+      const dropdownHeight = Math.min(options.length * 48 + 60, isMobile ? 300 : 350); // Larger items on mobile
       const spaceBelow = window.innerHeight - rect.bottom;
 
       let top = rect.bottom + 4;
       let left = rect.left;
+      let width = rect.width;
+
+      // On mobile, make dropdown wider and centered if needed
+      if (isMobile) {
+        const padding = 16;
+        const maxWidth = window.innerWidth - (padding * 2);
+
+        if (width < maxWidth) {
+          // Center the dropdown if trigger is narrow
+          const centerOffset = (maxWidth - width) / 2;
+          left = Math.max(padding, left - centerOffset);
+          width = Math.min(maxWidth, width + (centerOffset * 2));
+        }
+
+        // Ensure dropdown doesn't go off-screen
+        if (left + width > window.innerWidth - padding) {
+          left = window.innerWidth - width - padding;
+        }
+        if (left < padding) {
+          left = padding;
+          width = window.innerWidth - (padding * 2);
+        }
+      }
 
       if (spaceBelow < dropdownHeight && rect.top > dropdownHeight) {
         top = rect.top - dropdownHeight - 4;
@@ -174,7 +198,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       setPosition({
         top,
         left,
-        width: rect.width
+        width
       });
     }
     setIsOpen(!isOpen);
@@ -212,25 +236,25 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       <div
         ref={triggerRef}
         onClick={toggleOpen}
-        className={`relative flex items-center w-full bg-white border rounded-lg transition-all cursor-pointer group ${className} ${isOpen ? 'ring-2 ring-green-500 border-transparent' : 'border-gray-200 hover:border-green-300'} ${disabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''}`}
+        className={`relative flex items-center w-full bg-white border rounded-lg transition-all cursor-pointer group min-h-[44px] sm:min-h-0 ${className} ${isOpen ? 'ring-2 ring-green-500 border-transparent' : 'border-gray-200 hover:border-green-300'} ${disabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''}`}
       >
         {icon && (
           <div className="pl-3 text-gray-400">
             {icon}
           </div>
         )}
-        <div className={`flex-1 p-2.5 text-sm truncate ${!selectedOption ? 'text-gray-400' : 'text-gray-900 font-medium'}`}>
+        <div className={`flex-1 p-3 sm:p-2.5 text-sm truncate ${!selectedOption ? 'text-gray-400' : 'text-gray-900 font-medium'}`}>
           {selectedOption ? (
             <div className="flex items-center gap-2">
               {selectedOption.color && (
-                <span className="w-2.5 h-2.5 rounded-full border border-black/10" style={{ backgroundColor: selectedOption.color }}></span>
+                <span className="w-3 h-3 sm:w-2.5 sm:h-2.5 rounded-full border border-black/10 flex-shrink-0" style={{ backgroundColor: selectedOption.color }}></span>
               )}
               {selectedOption.label}
             </div>
           ) : placeholder}
         </div>
         <div className="pr-3 text-gray-400">
-          <ChevronDown size={16} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown size={18} className={`sm:w-4 sm:h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </div>
       </div>
 
@@ -247,9 +271,9 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         >
           {/* Search Input */}
           {searchable && (
-            <div className="p-2 border-b border-gray-100 bg-gray-50">
+            <div className="p-2 sm:p-2 border-b border-gray-100 bg-gray-50">
               <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Search size={18} className="sm:w-4 sm:h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   ref={searchInputRef}
                   type="text"
@@ -259,7 +283,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                     setHighlightedIndex(0); // Reset to first option when searching
                   }}
                   placeholder={searchPlaceholder}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                  className="w-full pl-9 pr-3 py-3 sm:py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all min-h-[44px] sm:min-h-0"
                   onClick={(e) => e.stopPropagation()}
                 />
               </div>
@@ -291,10 +315,10 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                     onMouseEnter={() => {
                       if (!opt.disabled) setHighlightedIndex(selectableIndex);
                     }}
-                    className={`px-3 flex items-center justify-between transition-colors 
+                    className={`px-3 sm:px-3 flex items-center justify-between transition-colors 
                       ${opt.disabled
                         ? 'py-2 bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider cursor-default border-y border-gray-100 first:border-t-0'
-                        : 'py-2.5 cursor-pointer ' + (
+                        : 'py-3 sm:py-2.5 cursor-pointer min-h-[44px] sm:min-h-0 ' + (
                           isHighlighted
                             ? 'bg-green-100 text-green-800 font-medium'
                             : opt.value === value
@@ -305,13 +329,13 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                   >
                     <div className="flex items-center gap-2">
                       {opt.color && (
-                        <span className="w-2.5 h-2.5 rounded-full border border-black/10" style={{ backgroundColor: opt.color }}></span>
+                        <span className="w-3 h-3 sm:w-2.5 sm:h-2.5 rounded-full border border-black/10 flex-shrink-0" style={{ backgroundColor: opt.color }}></span>
                       )}
-                      <span className="text-sm">
+                      <span className="text-sm sm:text-sm">
                         {searchable && searchQuery ? highlightText(opt.label, searchQuery) : opt.label}
                       </span>
                     </div>
-                    {opt.value === value && !opt.disabled && <Check size={14} className="flex-shrink-0" />}
+                    {opt.value === value && !opt.disabled && <Check size={16} className="flex-shrink-0" />}
                   </div>
                 );
               })

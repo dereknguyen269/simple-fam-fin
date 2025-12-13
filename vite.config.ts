@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       host: 'localhost', // Only accessible from this machine
       // If you need network access, use: host: true
+      // Enable SPA fallback for client-side routing
+      proxy: {},
+      historyApiFallback: true,
     },
     plugins: [react()],
     define: {

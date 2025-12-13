@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Routes, Route, useNavigate, Link } from 'react-router-dom';
+import { Routes, Route, useNavigate, Link, useLocation } from 'react-router-dom';
 import {
   Expense,
   RecurringExpense,
@@ -83,6 +83,7 @@ import { PrivacyPage } from './components/PrivacyPage';
 import { TermsPage } from './components/TermsPage';
 import { CookiesPage } from './components/CookiesPage';
 import { ContactPage } from './components/ContactPage';
+import { ReconnectModal } from './components/ReconnectModal';
 import {
   Wallet as WalletIcon,
   LayoutDashboard,
@@ -103,21 +104,34 @@ import {
   MessageSquare
 } from 'lucide-react';
 
+
 enum View {
   HOME = 'home',
   DASHBOARD = 'dashboard',
   EXPENSES = 'expenses',
   GOALS = 'goals',
+  SETTINGS = 'settings',
 }
 
 const App: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // App State
   const [needsSetup, setNeedsSetup] = useState(false);
   const [hasStarted, setHasStarted] = useState(false); // New state to track if user clicked "Get Started"
   const [isLoading, setIsLoading] = useState(true);
+
+  // Determine current view from URL
+  const getViewFromPath = (pathname: string): View => {
+    if (pathname === '/app' || pathname === '/app/') return View.HOME;
+    if (pathname === '/app/dashboard') return View.DASHBOARD;
+    if (pathname === '/app/transactions') return View.EXPENSES;
+    if (pathname === '/app/goals') return View.GOALS;
+    if (pathname === '/app/settings') return View.SETTINGS;
+    return View.HOME;
+  };
 
   // App Data State
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -130,7 +144,7 @@ const App: React.FC = () => {
   const [categoryItems, setCategoryItems] = useState<CategoryItem[]>(DEFAULT_CATEGORY_ITEMS);
   const [memberItems, setMemberItems] = useState<MemberItem[]>(DEFAULT_MEMBER_ITEMS);
 
-  const [currentView, setCurrentView] = useState<View>(View.HOME);
+  const [currentView, setCurrentView] = useState<View>(getViewFromPath(location.pathname));
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Google Sheets Integration State
@@ -230,6 +244,33 @@ const App: React.FC = () => {
   useEffect(() => {
     syncStatusRef.current = syncStatus;
   }, [syncStatus]);
+
+  // Sync view with URL changes (for browser back/forward)
+  useEffect(() => {
+    const viewFromUrl = getViewFromPath(location.pathname);
+    if (viewFromUrl !== currentView) {
+      setCurrentView(viewFromUrl);
+    }
+  }, [location.pathname]);
+
+  // Redirect from / to /app when user has started
+  useEffect(() => {
+    if (!isLoading && !needsSetup && hasStarted && location.pathname === '/') {
+      navigate('/app', { replace: true });
+    }
+  }, [isLoading, needsSetup, hasStarted, location.pathname, navigate]);
+
+  // Helper to navigate to a view with URL
+  const navigateToView = (view: View) => {
+    const pathMap = {
+      [View.HOME]: '/app',
+      [View.DASHBOARD]: '/app/dashboard',
+      [View.EXPENSES]: '/app/transactions',
+      [View.GOALS]: '/app/goals',
+      [View.SETTINGS]: '/app/settings',
+    };
+    navigate(pathMap[view]);
+  };
 
   // Helper to process recurring logic
   const processRecurringExpenses = (currentExpenses: Expense[], currentRecurring: RecurringExpense[]) => {
@@ -859,6 +900,7 @@ const App: React.FC = () => {
       setSyncError(null);
 
       await initializeGapiClient(config);
+
       await handleAuthClick(config.clientId);
 
       isRemoteUpdate.current = true;
@@ -891,7 +933,13 @@ const App: React.FC = () => {
       setSyncError(null);
       setTimeout(() => isRemoteUpdate.current = false, 500);
     } catch (error: any) {
-      console.error("Google Connect Error", error);
+      console.error("[OAuth] Connection error:", error);
+      console.error("[OAuth] Error details:", {
+        message: error.message,
+        status: error.status,
+        result: error.result,
+        originalError: error.originalError
+      });
 
       let errorMessage = 'Failed to connect to Google Sheets.';
       let errorTitle = 'Connection Failed';
@@ -911,6 +959,13 @@ const App: React.FC = () => {
           'Please allow popups for this site and try again.';
       } else if (error.message?.includes('client_id') || error.message?.includes('apiKey')) {
         errorMessage = 'Invalid API credentials. Please check your Client ID and API Key.';
+      } else if (error.message?.includes('idpiframe_initialization_failed')) {
+        errorTitle = 'OAuth Configuration Error';
+        errorMessage = `Google OAuth initialization failed.\n\n` +
+          `Current origin: ${window.location.origin}\n\n` +
+          `Please ensure this origin is added to "Authorized JavaScript origins" in Google Cloud Console:\n` +
+          `https://console.cloud.google.com/apis/credentials\n\n` +
+          `Error: ${error.message}`;
       } else if (error.status === 404) {
         errorMessage = 'Spreadsheet not found. Please check the Spreadsheet ID.';
       } else if (error.status === 403) {
@@ -1087,6 +1142,14 @@ const App: React.FC = () => {
     handleDisconnectGoogle();
   };
 
+  const handleStartFresh = () => {
+    // Clear all local storage
+    localStorage.clear();
+
+    // Reload the page to restart from landing page
+    window.location.reload();
+  };
+
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
   if (isLoading) return <div className="flex h-screen items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div></div>;
@@ -1192,16 +1255,19 @@ const App: React.FC = () => {
         showCancel={dialogState.showCancel}
       />
 
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/20 z-20 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
+      {/* Blocking Reconnect Modal - Forces user to reconnect when sync is paused */}
+      <ReconnectModal
+        isOpen={!isGoogleConnected && isSyncEnabled && !needsSetup}
+        onReconnect={handleManualSync}
+        onStartFresh={handleStartFresh}
+        errorMessage={syncError || 'Your session has expired. Please reconnect to continue using the app.'}
+        isReconnecting={isSyncing}
+      />
 
+      {/* Sidebar - Hidden on mobile, visible on desktop */}
       <aside className={`
-        fixed lg:static inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        hidden lg:flex
+        lg:static inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200
       `}>
         <div className="h-full flex flex-col">
           <div className="py-6 px-6 flex items-center justify-center border-b border-gray-100">
@@ -1210,7 +1276,7 @@ const App: React.FC = () => {
 
           <nav className="flex-1 p-4 space-y-2">
             <button
-              onClick={() => { setCurrentView(View.HOME); setIsSidebarOpen(false); }}
+              onClick={() => { navigateToView(View.HOME); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.HOME
                 ? 'bg-green-50 text-green-700 shadow-sm'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -1220,7 +1286,7 @@ const App: React.FC = () => {
               {t('navigation.home')}
             </button>
             <button
-              onClick={() => { setCurrentView(View.DASHBOARD); setIsSidebarOpen(false); }}
+              onClick={() => { navigateToView(View.DASHBOARD); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.DASHBOARD
                 ? 'bg-green-50 text-green-700 shadow-sm'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -1230,7 +1296,7 @@ const App: React.FC = () => {
               {t('navigation.dashboard')}
             </button>
             <button
-              onClick={() => { setCurrentView(View.EXPENSES); setIsSidebarOpen(false); }}
+              onClick={() => { navigateToView(View.EXPENSES); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.EXPENSES
                 ? 'bg-green-50 text-green-700 shadow-sm'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -1240,7 +1306,7 @@ const App: React.FC = () => {
               {t('navigation.transactions')}
             </button>
             <button
-              onClick={() => { setCurrentView(View.GOALS); setIsSidebarOpen(false); }}
+              onClick={() => { navigateToView(View.GOALS); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.GOALS
                 ? 'bg-green-50 text-green-700 shadow-sm'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -1267,8 +1333,11 @@ const App: React.FC = () => {
               {t('navigation.feedback')}
             </button>
             <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all"
+              onClick={() => { navigateToView(View.SETTINGS); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.SETTINGS
+                ? 'bg-green-50 text-green-700 shadow-sm'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
             >
               <Settings size={20} />
               {t('navigation.settings')}
@@ -1315,16 +1384,19 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-center lg:justify-between px-6 lg:px-8 shrink-0">
-          <div className="flex items-center gap-4 w-full lg:w-auto">
-            <button onClick={toggleSidebar} className="lg:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-              <Menu size={20} />
-            </button>
-            <h2 className="text-lg font-semibold text-gray-800">
-              {currentView === View.HOME ? t('navigation.home') : currentView === View.DASHBOARD ? t('header.walletOverview') : currentView === View.EXPENSES ? t('navigation.transactions') : t('header.financialGoals')}
-            </h2>
-          </div>
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative pb-16 lg:pb-0">
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-8 shrink-0">
+          {/* Mobile: Logo only on left */}
+          <img
+            src="/images/simple_famfin.png"
+            alt="SimpleFamFin"
+            className="lg:hidden h-8 w-auto object-contain"
+          />
+
+          {/* Desktop: Text title only */}
+          <h2 className="hidden lg:block text-lg font-semibold text-gray-800">
+            {currentView === View.HOME ? t('navigation.home') : currentView === View.DASHBOARD ? t('header.walletOverview') : currentView === View.EXPENSES ? t('navigation.transactions') : currentView === View.SETTINGS ? t('navigation.settings') : t('header.financialGoals')}
+          </h2>
           <div className="hidden lg:flex items-center gap-4 relative">
             {getStatusBadge()}
 
@@ -1457,23 +1529,13 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        {!isGoogleConnected && (
-          <div className={`border-b px-6 py-2 flex items-center justify-between shrink-0 ${isSyncEnabled ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-200'}`}>
-            <div className={`flex items-center gap-2 text-xs ${isSyncEnabled ? 'text-amber-800' : 'text-gray-500'}`}>
-              <AlertTriangle size={14} className={isSyncEnabled ? "text-amber-600" : "text-gray-400"} />
-              <span className="font-semibold">{isSyncEnabled ? t('sync.syncPaused') : t('sync.localStorageMode')}</span>
-              <span>{isSyncEnabled ? t('sync.sessionExpired') : t('sync.dataSavedLocally')}</span>
+        {!isGoogleConnected && !isSyncEnabled && (
+          <div className="border-b px-6 py-2 flex items-center justify-between shrink-0 bg-gray-50 border-gray-200">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <AlertTriangle size={14} className="text-gray-400" />
+              <span className="font-semibold">{t('sync.localStorageMode')}</span>
+              <span>{t('sync.dataSavedLocally')}</span>
             </div>
-            {/* <button
-              onClick={isSyncEnabled ? handleManualSync : () => setIsSettingsOpen(true)}
-              className={`text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2 ${isSyncEnabled
-                ? 'bg-white text-amber-700 border border-amber-200 hover:bg-amber-50 hover:border-amber-300'
-                : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-md hover:from-blue-700 hover:to-indigo-700 active:scale-95 border border-transparent'
-                }`}
-            >
-              {isSyncEnabled ? <RefreshCw size={14} /> : <CloudLightning size={14} />}
-              {isSyncEnabled ? 'Reconnect Now' : 'Connect Cloud'}
-            </button> */}
           </div>
         )}
 
@@ -1491,6 +1553,7 @@ const App: React.FC = () => {
                 members={memberList}
                 categoryColors={categoryColors}
                 wallets={computedWallets}
+                onHelpClick={() => setIsHelpOpen(true)}
               />
             ) : currentView === View.DASHBOARD ? (
               <Dashboard
@@ -1522,6 +1585,27 @@ const App: React.FC = () => {
                 wallets={computedWallets}
                 goals={goals}
               />
+            ) : currentView === View.SETTINGS ? (
+              <div className="h-full">
+                {/* Settings Modal rendered as a page */}
+                <SettingsModal
+                  isOpen={true}
+                  asPage={true}
+                  onClose={() => navigateToView(View.HOME)}
+                  onConnect={handleConnectGoogle}
+                  onDisconnect={handleDisconnectGoogle}
+                  isConnected={isGoogleConnected}
+                  onCurrencyChange={setCurrencyCode}
+                  onResetData={handleResetData}
+                  onClearData={handleClearData}
+                  categoryItems={categoryItems}
+                  members={memberItems}
+                  onUpdateCategoryItems={setCategoryItems}
+                  onUpdateMembers={setMemberItems}
+                  onRenameCategory={handleRenameCategory}
+                  userProfile={userProfile}
+                />
+              </div>
             ) : (
               <GoalsView
                 goals={goals}
@@ -1541,6 +1625,66 @@ const App: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* Mobile Bottom Navigation */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-inset-bottom">
+          <div className="flex items-center justify-around h-16 px-2">
+            <button
+              onClick={() => navigateToView(View.HOME)}
+              className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors ${currentView === View.HOME
+                ? 'text-green-600'
+                : 'text-gray-500'
+                }`}
+            >
+              <HomeIcon size={20} className={currentView === View.HOME ? 'stroke-[2.5]' : 'stroke-2'} />
+              <span className="text-[9px] font-medium truncate max-w-full px-1">{t('navigation.home')}</span>
+            </button>
+
+            <button
+              onClick={() => navigateToView(View.DASHBOARD)}
+              className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors ${currentView === View.DASHBOARD
+                ? 'text-green-600'
+                : 'text-gray-500'
+                }`}
+            >
+              <LayoutDashboard size={20} className={currentView === View.DASHBOARD ? 'stroke-[2.5]' : 'stroke-2'} />
+              <span className="text-[9px] font-medium truncate max-w-full px-1">{t('navigation.dashboard')}</span>
+            </button>
+
+            <button
+              onClick={() => navigateToView(View.EXPENSES)}
+              className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors ${currentView === View.EXPENSES
+                ? 'text-green-600'
+                : 'text-gray-500'
+                }`}
+            >
+              <Table2 size={20} className={currentView === View.EXPENSES ? 'stroke-[2.5]' : 'stroke-2'} />
+              <span className="text-[9px] font-medium truncate max-w-full px-1">{t('navigation.transactions')}</span>
+            </button>
+
+            <button
+              onClick={() => navigateToView(View.GOALS)}
+              className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors ${currentView === View.GOALS
+                ? 'text-green-600'
+                : 'text-gray-500'
+                }`}
+            >
+              <Target size={20} className={currentView === View.GOALS ? 'stroke-[2.5]' : 'stroke-2'} />
+              <span className="text-[9px] font-medium truncate max-w-full px-1">{t('navigation.goals')}</span>
+            </button>
+
+            <button
+              onClick={() => navigateToView(View.SETTINGS)}
+              className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors ${currentView === View.SETTINGS
+                ? 'text-green-600'
+                : 'text-gray-500'
+                }`}
+            >
+              <Settings size={20} className={currentView === View.SETTINGS ? 'stroke-[2.5]' : 'stroke-2'} />
+              <span className="text-[9px] font-medium truncate max-w-full px-1">{t('navigation.settings')}</span>
+            </button>
+          </div>
+        </nav>
       </main>
     </div>
   );

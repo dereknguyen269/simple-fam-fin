@@ -37,7 +37,21 @@
     "localStorageMode": "Local Storage Mode:",
     "dataSavedLocally": "Data is saved only on this browser.",
     "reconnectNow": "Reconnect Now",
-    "connectCloud": "Connect Cloud"
+    "connectCloud": "Connect Cloud",
+    "reconnectModal": {
+      "title": "Connection Required",
+      "subtitle": "Sync has been paused",
+      "errorTitle": "Authentication Expired",
+      "errorMessage": "Your session has expired. Please reconnect to continue using the app.",
+      "step1": "Click \"Reconnect Now\" to authenticate with Google",
+      "step2": "Your data will be synced automatically",
+      "step3": "Continue using the app seamlessly",
+      "reconnecting": "Reconnecting...",
+      "dataSafe": "Your local data is safe and will be synced once reconnected",
+      "or": "OR",
+      "startFresh": "Start Fresh",
+      "startFreshWarning": "This will clear all local data and restart the app"
+    }
   },
   "landing": {
     "title": "Family Finance Manager",

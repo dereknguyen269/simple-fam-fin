@@ -11,7 +11,8 @@ import {
   Plus,
   Pencil,
   Trash2,
-  Wallet as WalletIcon
+  Wallet as WalletIcon,
+  HelpCircle
 } from 'lucide-react';
 import { ExpenseModal } from './ExpenseModal';
 import { Dialog } from './Dialog';
@@ -27,6 +28,7 @@ interface HomeProps {
   wallets?: Wallet[];
   onUpdateExpense?: (expense: Expense) => void;
   onDeleteExpense?: (id: string) => void;
+  onHelpClick?: () => void;
 }
 
 export const Home: React.FC<HomeProps> = ({
@@ -39,7 +41,8 @@ export const Home: React.FC<HomeProps> = ({
   categoryColors = {},
   wallets = [],
   onUpdateExpense,
-  onDeleteExpense
+  onDeleteExpense,
+  onHelpClick
 }) => {
   const today = new Date().toISOString().split('T')[0];
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -170,6 +173,17 @@ export const Home: React.FC<HomeProps> = ({
             </div>
             <h1 className="text-3xl font-bold mb-1">Welcome Back!</h1>
             <p className="text-green-100">Here is your financial summary for today.</p>
+
+            {/* Help & Tutorials Link */}
+            {onHelpClick && (
+              <button
+                onClick={onHelpClick}
+                className="mt-3 inline-flex items-center gap-1.5 text-sm text-white underline underline-offset-2 hover:text-green-50 transition-colors"
+              >
+                <HelpCircle size={16} />
+                <span>Help & Tutorials</span>
+              </button>
+            )}
           </div>
 
           {/* Main Action Button */}

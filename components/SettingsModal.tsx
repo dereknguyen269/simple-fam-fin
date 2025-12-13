@@ -25,6 +25,7 @@ interface SettingsModalProps {
   onUpdateMembers: (mems: MemberItem[]) => void;
   onRenameCategory: (oldName: string, newName: string) => void;
   userProfile?: UserProfile | null;
+  asPage?: boolean; // New prop to render as page instead of modal
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -41,7 +42,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateCategoryItems,
   onUpdateMembers,
   onRenameCategory,
-  userProfile }) => {
+  userProfile,
+  asPage = false }) => {
   const [config, setConfig] = useState<GoogleConfig>({
     clientId: '',
     apiKey: '',
@@ -653,8 +655,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         showCancel={dialogState.showCancel}
       />
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl flex flex-col max-h-[95vh] overflow-hidden">
+      <div className={asPage ? "h-full flex flex-col" : "fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"}>
+        <div className={asPage ? "bg-white flex flex-col h-full overflow-hidden" : "bg-white rounded-xl shadow-xl w-full max-w-5xl flex flex-col max-h-[95vh] overflow-hidden"}>
           <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
             <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
               <Database className="text-green-600" size={24} />

@@ -554,8 +554,8 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
               onClick={exportToCSV}
               disabled={isExporting}
               className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all relative overflow-hidden ${isExporting
-                  ? 'text-white bg-green-600 border border-green-600 cursor-wait'
-                  : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'
+                ? 'text-white bg-green-600 border border-green-600 cursor-wait'
+                : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'
                 }`}
               title={isExporting ? `Exporting... ${exportProgress.toFixed(0)}%` : 'Export to CSV'}
             >
@@ -650,23 +650,28 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                  <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[70%]">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
                     <span
-                      className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border whitespace-nowrap"
+                      className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border whitespace-nowrap truncate max-w-[120px]"
                       style={{
                         backgroundColor: categoryColors[expense.category] ? hexToRgba(categoryColors[expense.category], 0.1) : '#f3f4f6',
                         color: categoryColors[expense.category] || '#4b5563',
                         borderColor: categoryColors[expense.category] ? hexToRgba(categoryColors[expense.category], 0.2) : '#e5e7eb'
                       }}
+                      title={expense.category}
                     >
                       {expense.category}
                     </span>
                     {expense.type === TransactionType.TRANSFER ? (
-                      <span className="text-[10px] text-gray-400 flex items-center gap-1 whitespace-nowrap">
-                        {getWalletDisplay(expense.walletId)} <ArrowRight size={8} /> {getWalletDisplay(expense.transferToWalletId)}
+                      <span className="text-[10px] text-gray-400 flex items-center gap-0.5 whitespace-nowrap truncate max-w-[140px]" title={`${expense.walletId} → ${expense.transferToWalletId}`}>
+                        <span className="truncate">{getWalletDisplay(expense.walletId)}</span>
+                        <ArrowRight size={8} className="shrink-0" />
+                        <span className="truncate">{getWalletDisplay(expense.transferToWalletId)}</span>
                       </span>
                     ) : (
-                      getWalletDisplay(expense.walletId)
+                      <span className="truncate max-w-[100px]" title={expense.walletId}>
+                        {getWalletDisplay(expense.walletId)}
+                      </span>
                     )}
                   </div>
 
