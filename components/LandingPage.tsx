@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { ArrowRight, PieChart, Shield, Users, Database, Wallet, TrendingUp, Check, Share2, Zap, Clock, Heart } from 'lucide-react';
+import { ArrowRight, PieChart, Shield, Users, Database, Wallet, TrendingUp, Check, Share2, Zap, Clock, Heart, Github } from 'lucide-react';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -16,12 +16,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
         <div className="flex items-center gap-2">
           <img src="/images/simple_famfin.png" alt="SimpleFamFin Logo" className="h-10 w-auto object-contain" />
         </div>
-        <button
-          onClick={onGetStarted}
-          className="px-5 py-2 text-sm font-medium text-green-700 hover:bg-green-50 rounded-lg transition-colors"
-        >
-          Sign In
-        </button>
+        <div className="flex items-center gap-4">
+          <a
+            href="https://github.com/dereknguyen269/simple-fam-fin"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-500 hover:text-gray-900 transition-colors"
+            aria-label="GitHub Repository"
+          >
+            <Github size={24} />
+          </a>
+          <button
+            onClick={onGetStarted}
+            className="px-5 py-2 text-sm font-medium text-green-700 hover:bg-green-50 rounded-lg transition-colors"
+          >
+            Sign In
+          </button>
+        </div>
       </header>
 
       {/* Hero Section */}
@@ -66,7 +77,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
               </div>
               <div className="flex items-center gap-2">
                 <Check className="text-green-600" size={16} />
-                <span>Open Source</span>
+                <a
+                  href="https://github.com/dereknguyen269/simple-fam-fin"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-green-700 hover:underline transition-colors"
+                >
+                  Open Source
+                </a>
               </div>
             </div>
           </div>

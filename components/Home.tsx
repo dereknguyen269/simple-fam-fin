@@ -260,9 +260,10 @@ export const Home: React.FC<HomeProps> = ({
               return (
                 <div
                   key={transaction.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-100 transition-colors group"
+                  onClick={() => handleEditClick(transaction)}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-100 transition-colors group cursor-pointer"
                 >
-                  <div className="flex items-center gap-4 flex-1">
+                  <div className="flex items-center gap-4 w-full sm:flex-1">
                     <div
                       className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
                       style={{ backgroundColor: `${categoryColor}20` }}
@@ -276,9 +277,9 @@ export const Home: React.FC<HomeProps> = ({
 
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-800 truncate">{transaction.description}</p>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500">
                         <span
-                          className="px-2 py-0.5 rounded-full font-medium"
+                          className="px-2 py-0.5 rounded-full font-medium whitespace-nowrap max-w-[120px] sm:max-w-none truncate block"
                           style={{
                             backgroundColor: `${categoryColor}20`,
                             color: categoryColor
@@ -298,26 +299,22 @@ export const Home: React.FC<HomeProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-right ml-4">
-                    <p className={`text-lg font-bold ${isIncome ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                      {isIncome ? '+' : '-'}{formatCurrency(transaction.amount, { ...currencyConfig, rate: 1 })}
-                    </p>
-                    <p className="text-xs text-gray-400">
+                  <div className="w-full sm:w-auto text-right sm:ml-4 mt-3 sm:mt-0 flex flex-row sm:flex-col justify-between sm:justify-center items-center sm:items-end">
+                    {/* On mobile: Date left, Amount right. On desktop: Amount top, Date bottom right */}
+                    <p className="text-xs text-gray-400 sm:order-2 sm:mt-0.5">
                       {new Date(transaction.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </p>
+                    <p className={`text-lg font-bold sm:order-1 ${isIncome ? 'text-green-600' : 'text-red-600'}`}>
+                      {isIncome ? '+' : '-'}{formatCurrency(transaction.amount, { ...currencyConfig, rate: 1 })}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-1 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
-                      onClick={() => handleEditClick(transaction)}
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="Edit"
-                    >
-                      <Pencil size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteClick(transaction.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClick(transaction.id);
+                      }}
                       className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete"
                     >

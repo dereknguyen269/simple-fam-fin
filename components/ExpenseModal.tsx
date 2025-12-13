@@ -146,9 +146,10 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
         setShowConfirmClose(false);
         setLastExpenseId(currentExpenseId);
       }
+    } else {
+      // Reset tracking ID when closed so next open triggers a full reset to ensure fresh state (e.g. new Date)
+      setLastExpenseId(undefined);
     }
-    // Note: Don't reset lastExpenseId when modal closes
-    // This allows us to detect mode changes when reopening
   }, [isOpen, expenseToEdit?.id]);
 
   // When type changes, ensure category is valid for that type
