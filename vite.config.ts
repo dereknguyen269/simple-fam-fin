@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
       // If you need network access, use: host: true
       // Enable SPA fallback for client-side routing
       proxy: {},
-      historyApiFallback: true,
+
     },
     plugins: [react()],
     define: {
