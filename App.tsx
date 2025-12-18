@@ -120,18 +120,8 @@ const App: React.FC = () => {
 
   // App State
   const [needsSetup, setNeedsSetup] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false); // New state to track if user clicked "Get Started"
+  const [hasStarted, setHasStarted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Determine current view from URL
-  const getViewFromPath = (pathname: string): View => {
-    if (pathname === '/app' || pathname === '/app/') return View.HOME;
-    if (pathname === '/app/dashboard') return View.DASHBOARD;
-    if (pathname === '/app/transactions') return View.EXPENSES;
-    if (pathname === '/app/goals') return View.GOALS;
-    if (pathname === '/app/settings') return View.SETTINGS;
-    return View.HOME;
-  };
 
   // App Data State
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -144,7 +134,8 @@ const App: React.FC = () => {
   const [categoryItems, setCategoryItems] = useState<CategoryItem[]>(DEFAULT_CATEGORY_ITEMS);
   const [memberItems, setMemberItems] = useState<MemberItem[]>(DEFAULT_MEMBER_ITEMS);
 
-  const [currentView, setCurrentView] = useState<View>(getViewFromPath(location.pathname));
+  // View state - no URL routing
+  const [currentView, setCurrentView] = useState<View>(View.HOME);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Google Sheets Integration State
@@ -245,32 +236,12 @@ const App: React.FC = () => {
     syncStatusRef.current = syncStatus;
   }, [syncStatus]);
 
-  // Sync view with URL changes (for browser back/forward)
-  useEffect(() => {
-    const viewFromUrl = getViewFromPath(location.pathname);
-    if (viewFromUrl !== currentView) {
-      setCurrentView(viewFromUrl);
-    }
-  }, [location.pathname]);
-
   // Redirect from / to /app when user has started
   useEffect(() => {
     if (!isLoading && !needsSetup && hasStarted && location.pathname === '/') {
       navigate('/app', { replace: true });
     }
   }, [isLoading, needsSetup, hasStarted, location.pathname, navigate]);
-
-  // Helper to navigate to a view with URL
-  const navigateToView = (view: View) => {
-    const pathMap = {
-      [View.HOME]: '/app',
-      [View.DASHBOARD]: '/app/dashboard',
-      [View.EXPENSES]: '/app/transactions',
-      [View.GOALS]: '/app/goals',
-      [View.SETTINGS]: '/app/settings',
-    };
-    navigate(pathMap[view]);
-  };
 
   // Helper to process recurring logic
   const processRecurringExpenses = (currentExpenses: Expense[], currentRecurring: RecurringExpense[]) => {
@@ -358,7 +329,17 @@ const App: React.FC = () => {
 
           if (getGoogleSyncEnabled()) {
             // Check if we have a valid token already
-            const hasToken = window.gapi?.client?.getToken();
+            let hasToken = window.gapi?.client?.getToken();
+
+            if (!hasToken) {
+              try {
+                console.log("Token expired or missing, attempting silent auth...");
+                await trySilentAuth();
+                hasToken = window.gapi?.client?.getToken();
+              } catch (e) {
+                console.warn("Silent auth attempt failed", e);
+              }
+            }
 
             if (hasToken) {
               // We have a token, try to use it
@@ -622,14 +603,22 @@ const App: React.FC = () => {
 
         // Handle auth errors
         if (e.status === 401 || e.status === 403) {
-          setIsGoogleConnected(false);
-          setSyncStatus('error');
-          setSyncError('Authentication expired. Please reconnect.');
+          try {
+            console.log("Auth error during poll, attempting silent refresh...");
+            await trySilentAuth();
+            console.log("Silent refresh successful.");
+            // Do not disconnect. Next poll will pick up the new token.
+          } catch (refreshErr) {
+            console.warn("Silent refresh failed during poll", refreshErr);
+            setIsGoogleConnected(false);
+            setSyncStatus('error');
+            setSyncError('Authentication expired. Please reconnect.');
 
-          // Clear the interval on auth failure
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
+            // Clear the interval on auth failure
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
           }
         } else {
           // Don't set error status for transient poll failures
@@ -1276,7 +1265,7 @@ const App: React.FC = () => {
 
           <nav className="flex-1 p-4 space-y-2">
             <button
-              onClick={() => { navigateToView(View.HOME); setIsSidebarOpen(false); }}
+              onClick={() => { setCurrentView(View.HOME); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.HOME
                 ? 'bg-green-50 text-green-700 shadow-sm'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -1286,7 +1275,7 @@ const App: React.FC = () => {
               {t('navigation.home')}
             </button>
             <button
-              onClick={() => { navigateToView(View.DASHBOARD); setIsSidebarOpen(false); }}
+              onClick={() => { setCurrentView(View.DASHBOARD); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.DASHBOARD
                 ? 'bg-green-50 text-green-700 shadow-sm'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -1296,7 +1285,7 @@ const App: React.FC = () => {
               {t('navigation.dashboard')}
             </button>
             <button
-              onClick={() => { navigateToView(View.EXPENSES); setIsSidebarOpen(false); }}
+              onClick={() => { setCurrentView(View.EXPENSES); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.EXPENSES
                 ? 'bg-green-50 text-green-700 shadow-sm'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -1306,7 +1295,7 @@ const App: React.FC = () => {
               {t('navigation.transactions')}
             </button>
             <button
-              onClick={() => { navigateToView(View.GOALS); setIsSidebarOpen(false); }}
+              onClick={() => { setCurrentView(View.GOALS); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.GOALS
                 ? 'bg-green-50 text-green-700 shadow-sm'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -1333,7 +1322,7 @@ const App: React.FC = () => {
               {t('navigation.feedback')}
             </button>
             <button
-              onClick={() => { navigateToView(View.SETTINGS); setIsSidebarOpen(false); }}
+              onClick={() => { setCurrentView(View.SETTINGS); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${currentView === View.SETTINGS
                 ? 'bg-green-50 text-green-700 shadow-sm'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -1591,7 +1580,7 @@ const App: React.FC = () => {
                 <SettingsModal
                   isOpen={true}
                   asPage={true}
-                  onClose={() => navigateToView(View.HOME)}
+                  onClose={() => setCurrentView(View.HOME)}
                   onConnect={handleConnectGoogle}
                   onDisconnect={handleDisconnectGoogle}
                   isConnected={isGoogleConnected}
@@ -1630,7 +1619,7 @@ const App: React.FC = () => {
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-inset-bottom">
           <div className="flex items-center justify-around h-16 px-2">
             <button
-              onClick={() => navigateToView(View.HOME)}
+              onClick={() => setCurrentView(View.HOME)}
               className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors ${currentView === View.HOME
                 ? 'text-green-600'
                 : 'text-gray-500'
@@ -1641,7 +1630,7 @@ const App: React.FC = () => {
             </button>
 
             <button
-              onClick={() => navigateToView(View.DASHBOARD)}
+              onClick={() => setCurrentView(View.DASHBOARD)}
               className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors ${currentView === View.DASHBOARD
                 ? 'text-green-600'
                 : 'text-gray-500'
@@ -1652,7 +1641,7 @@ const App: React.FC = () => {
             </button>
 
             <button
-              onClick={() => navigateToView(View.EXPENSES)}
+              onClick={() => setCurrentView(View.EXPENSES)}
               className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors ${currentView === View.EXPENSES
                 ? 'text-green-600'
                 : 'text-gray-500'
@@ -1663,7 +1652,7 @@ const App: React.FC = () => {
             </button>
 
             <button
-              onClick={() => navigateToView(View.GOALS)}
+              onClick={() => setCurrentView(View.GOALS)}
               className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors ${currentView === View.GOALS
                 ? 'text-green-600'
                 : 'text-gray-500'
@@ -1674,7 +1663,7 @@ const App: React.FC = () => {
             </button>
 
             <button
-              onClick={() => navigateToView(View.SETTINGS)}
+              onClick={() => setCurrentView(View.SETTINGS)}
               className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors ${currentView === View.SETTINGS
                 ? 'text-green-600'
                 : 'text-gray-500'
