@@ -214,6 +214,7 @@ export const trySilentAuth = (): Promise<void> => {
         // Silent auth success
         if (resp.access_token && window.gapi.client) {
           window.gapi.client.setToken(resp);
+          saveGoogleToken(resp);
         }
         resolve();
       }

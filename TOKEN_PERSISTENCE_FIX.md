@@ -193,6 +193,21 @@ Potential enhancements:
 
 ---
 
-**Status**: ✅ **FIXED**
-**Version**: 2.1.0
-**Date**: December 7, 2025
+## Update (December 18, 2025)
+### Auto-Renewal Implemented
+To address the "Session expired" annoyance, we have implemented **Silent Authentication** (`trySilentAuth`) as a fallback and renewal mechanism.
+
+**New Behavior**:
+1.  **On App Load**: If the saved token is expired or missing, the app attempts to silently refresh the token using `trySilentAuth` (prompt: 'none').
+    *   If successful (user has active Google session): Session is restored **transparently** without user interaction.
+    *   If failed: User falls back to "Session expired" manual reconnect.
+2.  **During Use (Polling/Saving)**: If the app encounters a 401 (Unauthorized) error, it attempts a silent refresh before giving up.
+    *   This prevents the app from disconnecting if the token expires while the tab is open.
+
+This effectively extends the session lifetime as long as the user's browser has an active Google login session, resolving the "must login again" issue.
+
+---
+
+**Status**: ✅ **ENHANCED** (Auto-Renewal Added)
+**Version**: 2.2.0
+**Date**: December 18, 2025
