@@ -456,11 +456,10 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
                 <FileText size={16} className="text-gray-400" />
-                Description
+                Description (Optional)
               </label>
               <input
                 type="text"
-                required
                 placeholder="What is this transaction?"
                 className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all bg-white text-gray-900"
                 value={formData.description}

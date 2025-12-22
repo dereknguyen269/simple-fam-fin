@@ -859,6 +859,24 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateCategoryItems = async (items: CategoryItem[]) => {
+    setCategoryItems(items);
+    saveCategories(items);
+
+    if (isGoogleConnected && isSyncEnabled && googleConfig.spreadsheetId) {
+      await saveRefData(googleConfig.spreadsheetId, items, memberItems);
+    }
+  };
+
+  const handleUpdateMembers = async (items: MemberItem[]) => {
+    setMemberItems(items);
+    saveMembers(items);
+
+    if (isGoogleConnected && isSyncEnabled && googleConfig.spreadsheetId) {
+      await saveRefData(googleConfig.spreadsheetId, categoryItems, items);
+    }
+  };
+
   const handleRenameCategory = (oldName: string, newName: string) => {
     const updatedExpenses = expenses.map(e =>
       e.category === oldName ? { ...e, category: newName } : e
@@ -871,9 +889,17 @@ const App: React.FC = () => {
     setBudgets(prev => prev.map(b => b.category === oldName ? { ...b, category: newName } : b));
   };
 
-  const handleConnectGoogle = async (config: GoogleConfig) => {
+  const handleConnectGoogle = async (config: GoogleConfig, refOverrides?: { categories: CategoryItem[], members: MemberItem[] }) => {
     setGoogleConfig(config);
     saveGoogleConfig(config);
+
+    // If overrides provided, update state immediately to reflect what we are about to save
+    if (refOverrides) {
+      setCategoryItems(refOverrides.categories);
+      setMemberItems(refOverrides.members);
+      saveCategories(refOverrides.categories);
+      saveMembers(refOverrides.members);
+    }
 
     if (!config.clientId || !config.apiKey || !config.spreadsheetId) {
       setIsGoogleConnected(false);
@@ -890,10 +916,31 @@ const App: React.FC = () => {
 
       await initializeGapiClient(config);
 
-      await handleAuthClick(config.clientId);
+      // Check if we already have a token to avoid opening popup unnecessarily
+      const savedToken = getGoogleToken();
+      if (!savedToken) {
+        await handleAuthClick(config.clientId);
+      }
 
       isRemoteUpdate.current = true;
-      const { expenses: sheetExpenses, wallets: sheetWallets } = await fetchExpensesFromSheet(config.spreadsheetId);
+      let sheetData;
+
+      try {
+        sheetData = await fetchExpensesFromSheet(config.spreadsheetId);
+      } catch (err: any) {
+        // If auth failed and we skipped auth (because we had a token), try authenticating now
+        if (savedToken && (err.status === 401 || err.status === 403 || err.message?.includes('authenticated'))) {
+          console.log("Token expired or invalid, triggering re-auth...");
+          await handleAuthClick(config.clientId);
+          // Retry fetch
+          sheetData = await fetchExpensesFromSheet(config.spreadsheetId);
+        } else {
+          // Re-throw if it's not an auth error or if we shouldn't retry
+          throw err;
+        }
+      }
+
+      const { expenses: sheetExpenses, wallets: sheetWallets } = sheetData;
 
       const isSheetEmpty = sheetExpenses.length === 0;
 
@@ -902,11 +949,23 @@ const App: React.FC = () => {
         if (sheetWallets && sheetWallets.length > 0) {
           setWallets(sheetWallets);
         }
-        await syncRefData(config.spreadsheetId);
+
+        // CRITICAL: If we have overrides (user just saved settings), PUSH them to sheet.
+        // Otherwise, PULL from sheet (normal sync).
+        if (refOverrides) {
+          await saveRefData(config.spreadsheetId, refOverrides.categories, refOverrides.members);
+        } else {
+          await syncRefData(config.spreadsheetId);
+        }
+
       } else {
         if (expenses.length > 0 || wallets.length > 1) {
           await saveExpensesToSheet(config.spreadsheetId, expenses, wallets);
-          await saveRefData(config.spreadsheetId, categoryItems, memberItems);
+          // Use overrides if available, otherwise current state
+          const catsToSave = refOverrides?.categories || categoryItems;
+          const memsToSave = refOverrides?.members || memberItems;
+          await saveRefData(config.spreadsheetId, catsToSave, memsToSave);
+
           await saveGoalsToSheet(config.spreadsheetId, goals);
           await saveBudgetsToSheet(config.spreadsheetId, budgets);
         }
@@ -1211,8 +1270,8 @@ const App: React.FC = () => {
         onClearData={handleClearData}
         categoryItems={categoryItems}
         members={memberItems}
-        onUpdateCategoryItems={setCategoryItems}
-        onUpdateMembers={setMemberItems}
+        onUpdateCategoryItems={handleUpdateCategoryItems}
+        onUpdateMembers={handleUpdateMembers}
         onRenameCategory={handleRenameCategory}
         userProfile={userProfile}
       />
@@ -1589,8 +1648,8 @@ const App: React.FC = () => {
                   onClearData={handleClearData}
                   categoryItems={categoryItems}
                   members={memberItems}
-                  onUpdateCategoryItems={setCategoryItems}
-                  onUpdateMembers={setMemberItems}
+                  onUpdateCategoryItems={handleUpdateCategoryItems}
+                  onUpdateMembers={handleUpdateMembers}
                   onRenameCategory={handleRenameCategory}
                   userProfile={userProfile}
                 />

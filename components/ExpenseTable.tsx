@@ -180,21 +180,23 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
   };
 
   const handleSaveExpense = (data: Partial<Expense>) => {
-    if (data.description && data.amount !== undefined && data.date) {
+    if (data.amount !== undefined && data.date) {
       const baseAmount = convertToBase(data.amount, currencyConfig);
       const type = data.type || TransactionType.EXPENSE;
+      const description = data.description || ''; // Allow empty description
 
       if (selectedExpense) {
         onUpdateExpense({
           ...selectedExpense,
           ...data as Expense,
+          description,
           amount: baseAmount,
           id: selectedExpense.id
         });
       } else {
         onAddExpense({
           date: data.date,
-          description: data.description,
+          description,
           amount: baseAmount,
           category: data.category!,
           member: data.member!,
@@ -209,7 +211,7 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
 
       if (isNewRecurrence && data.recurrence) {
         onAddRecurring({
-          description: data.description!,
+          description: description || 'Recurring',
           category: data.category!,
           amount: baseAmount,
           member: data.member!,
@@ -652,11 +654,10 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
                   <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
                     <span
-                      className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border whitespace-nowrap truncate max-w-[120px]"
+                      className="text-[10px] font-bold tracking-wider border-l-2 pl-1.5 truncate max-w-[120px]"
                       style={{
-                        backgroundColor: categoryColors[expense.category] ? hexToRgba(categoryColors[expense.category], 0.1) : '#f3f4f6',
                         color: categoryColors[expense.category] || '#4b5563',
-                        borderColor: categoryColors[expense.category] ? hexToRgba(categoryColors[expense.category], 0.2) : '#e5e7eb'
+                        borderColor: categoryColors[expense.category] || '#e5e7eb'
                       }}
                       title={expense.category}
                     >
@@ -801,11 +802,10 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                     <td className="p-4 text-sm text-gray-800 font-medium">{expense.description}</td>
                     <td className="p-4 text-sm text-gray-600">
                       <span
-                        className="px-2 py-1 rounded-full text-xs border"
+                        className="text-xs font-medium border-l-2 pl-2"
                         style={{
-                          backgroundColor: categoryColors[expense.category] ? hexToRgba(categoryColors[expense.category], 0.15) : '#f3f4f6',
                           color: categoryColors[expense.category] || '#4b5563',
-                          borderColor: categoryColors[expense.category] ? hexToRgba(categoryColors[expense.category], 0.3) : '#e5e7eb'
+                          borderColor: categoryColors[expense.category] || '#e5e7eb'
                         }}
                       >
                         {expense.category}
