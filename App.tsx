@@ -59,7 +59,8 @@ import {
   saveRefData,
   saveGoalsToSheet,
   saveBudgetsToSheet,
-  getUserProfile
+  getUserProfile,
+  ensureValidToken
 } from './services/googleSheetsService';
 import {
   calculateWalletBalances,
@@ -156,6 +157,7 @@ const App: React.FC = () => {
   const syncStatusRef = useRef(syncStatus); // Ref to track status inside async polling closures
   const isSavingRef = useRef(false); // Prevent concurrent saves
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tokenRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryCountRef = useRef(0);
   const MAX_RETRIES = 3;
 
@@ -486,6 +488,18 @@ const App: React.FC = () => {
           throw new Error('Not authenticated. Please reconnect.');
         }
 
+        // Proactively refresh token if needed (within 5 minutes of expiry)
+        try {
+          const tokenValid = await ensureValidToken();
+          if (!tokenValid) {
+            console.warn('Token validation failed before save, attempting silent auth...');
+            await trySilentAuth();
+          }
+        } catch (tokenError) {
+          console.warn('Token refresh attempt failed before save:', tokenError);
+          // Continue with save attempt - might still work if token is valid
+        }
+
         await Promise.all([
           saveExpensesToSheet(googleConfig.spreadsheetId, expenses, wallets),
           saveRefData(googleConfig.spreadsheetId, categoryItems, memberItems),
@@ -569,6 +583,17 @@ const App: React.FC = () => {
           return;
         }
 
+        // Proactively refresh token if needed (within 5 minutes of expiry)
+        try {
+          const tokenValid = await ensureValidToken();
+          if (!tokenValid) {
+            console.warn('Token validation failed, attempting silent auth...');
+            await trySilentAuth();
+          }
+        } catch (tokenError) {
+          console.warn('Token refresh attempt failed, will try API call anyway:', tokenError);
+        }
+
         setSyncStatus('fetching');
 
         const { expenses: sheetExpenses, wallets: sheetWallets } = await fetchExpensesFromSheet(googleConfig.spreadsheetId);
@@ -641,6 +666,46 @@ const App: React.FC = () => {
       }
     };
   }, [isGoogleConnected, googleConfig]);
+
+  // 3. Periodic Token Refresh Check (Every 4 minutes)
+  // This ensures tokens are refreshed proactively even when user is idle
+  useEffect(() => {
+    if (!isGoogleConnected) {
+      // Clean up any existing interval
+      if (tokenRefreshIntervalRef.current) {
+        clearInterval(tokenRefreshIntervalRef.current);
+        tokenRefreshIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const checkAndRefreshToken = async () => {
+      try {
+        const tokenValid = await ensureValidToken();
+        if (!tokenValid) {
+          console.log('Token check: No valid token found');
+          // Don't disconnect here - let the next API call handle it
+        }
+      } catch (error) {
+        console.warn('Periodic token refresh check failed:', error);
+        // Don't disconnect - this is just a proactive check
+      }
+    };
+
+    // Perform initial check
+    checkAndRefreshToken();
+
+    // Set up interval - check every 4 minutes (240000ms)
+    // This is less than the 5-minute threshold, ensuring we catch tokens before they expire
+    tokenRefreshIntervalRef.current = setInterval(checkAndRefreshToken, 240000);
+
+    return () => {
+      if (tokenRefreshIntervalRef.current) {
+        clearInterval(tokenRefreshIntervalRef.current);
+        tokenRefreshIntervalRef.current = null;
+      }
+    };
+  }, [isGoogleConnected]);
 
 
   const handleSetupComplete = async () => {

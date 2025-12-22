@@ -244,6 +244,8 @@ export const saveGoogleToken = (token: any): void => {
       // Calculate expiry time (tokens typically expire in 1 hour)
       const expiryTime = Date.now() + (token.expires_in ? token.expires_in * 1000 : 3600000);
       localStorage.setItem(GOOGLE_TOKEN_EXPIRY_KEY, String(expiryTime));
+      
+      console.log(`Token saved. Expires in ${token.expires_in || 3600} seconds at ${new Date(expiryTime).toLocaleTimeString()}`);
     }
   } catch (e) {
     console.error("Failed to save Google token", e);
@@ -261,6 +263,7 @@ export const getGoogleToken = (): any | null => {
     const expiryTime = parseInt(expiryData);
     if (Date.now() >= expiryTime) {
       // Token expired, clear it
+      console.log("Token expired, clearing...");
       clearGoogleToken();
       return null;
     }
@@ -275,5 +278,43 @@ export const getGoogleToken = (): any | null => {
 export const clearGoogleToken = (): void => {
   localStorage.removeItem(GOOGLE_TOKEN_KEY);
   localStorage.removeItem(GOOGLE_TOKEN_EXPIRY_KEY);
+};
+
+/**
+ * Check if token needs refresh (within 5 minutes of expiry)
+ * This allows proactive token refresh before it actually expires
+ */
+export const shouldRefreshToken = (): boolean => {
+  try {
+    const expiryData = localStorage.getItem(GOOGLE_TOKEN_EXPIRY_KEY);
+    if (!expiryData) return false;
+
+    const expiryTime = parseInt(expiryData);
+    const now = Date.now();
+    const fiveMinutes = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+    // Return true if token expires in less than 5 minutes
+    return (expiryTime - now) < fiveMinutes;
+  } catch (e) {
+    return false;
+  }
+};
+
+/**
+ * Get time remaining until token expires (in seconds)
+ */
+export const getTokenTimeRemaining = (): number => {
+  try {
+    const expiryData = localStorage.getItem(GOOGLE_TOKEN_EXPIRY_KEY);
+    if (!expiryData) return 0;
+
+    const expiryTime = parseInt(expiryData);
+    const now = Date.now();
+    const remaining = Math.max(0, Math.floor((expiryTime - now) / 1000));
+    
+    return remaining;
+  } catch (e) {
+    return 0;
+  }
 };
 

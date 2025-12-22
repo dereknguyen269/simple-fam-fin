@@ -206,23 +206,69 @@ export const trySilentAuth = (): Promise<void> => {
       return;
     }
 
+    console.log("Attempting silent token refresh...");
+
     tokenClient.callback = async (resp: any) => {
       if (resp.error) {
         // Silent auth failed
+        console.warn("Silent auth failed:", resp.error);
         reject(resp);
       } else {
         // Silent auth success
         if (resp.access_token && window.gapi.client) {
           window.gapi.client.setToken(resp);
           saveGoogleToken(resp);
+          console.log("Silent token refresh successful");
         }
         resolve();
       }
     };
 
     // Attempt to get token without prompt using 'none'
-    tokenClient.requestAccessToken({ prompt: 'none' });
+    try {
+      tokenClient.requestAccessToken({ prompt: 'none' });
+    } catch (error) {
+      console.error("Error requesting silent token:", error);
+      reject(error);
+    }
   });
+};
+
+/**
+ * Automatically refresh token if needed
+ * Returns true if token is valid (either already valid or successfully refreshed)
+ */
+export const ensureValidToken = async (): Promise<boolean> => {
+  try {
+    // Check if we have a token
+    const currentToken = window.gapi?.client?.getToken();
+    if (!currentToken) {
+      console.log("No token found");
+      return false;
+    }
+    // console.log("Token found", currentToken);
+
+    // Import the helper from storageService
+    const { shouldRefreshToken } = await import('./storageService');
+
+    // Check if token needs refresh (within 5 minutes of expiry)
+    if (shouldRefreshToken()) {
+      console.log("Token expiring soon, attempting proactive refresh...");
+      try {
+        await trySilentAuth();
+        return true;
+      } catch (error) {
+        console.warn("Proactive token refresh failed:", error);
+        // Token might still be valid for a few more minutes
+        return true;
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in ensureValidToken:", error);
+    return false;
+  }
 };
 
 export const handleSignOut = () => {
