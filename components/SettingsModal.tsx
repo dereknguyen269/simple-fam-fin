@@ -13,7 +13,7 @@ const ALLOWED_INCOME_CATEGORIES = ['Salary', 'Profit', 'Investment', 'Other', 'G
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConnect: (config: GoogleConfig) => void;
+  onConnect: (config: GoogleConfig, overrides?: { categories: CategoryItem[], members: MemberItem[] }) => void;
   onDisconnect: () => void;
   isConnected: boolean;
   onCurrencyChange: (code: CurrencyCode) => void;
@@ -533,18 +533,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setLocalCategoryItems(localCategoryItems.map(i => i.id === id ? { ...i, ...updates } : i));
   };
 
+  // Drag and drop handlers for categories
+  const handleCategoryDragStart = (e: React.DragEvent, index: number, type: TransactionType) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', JSON.stringify({ index, type }));
+  };
+
+  const handleCategoryDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleCategoryDrop = (e: React.DragEvent, dropIndex: number, dropType: TransactionType) => {
+    e.preventDefault();
+    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+    const dragIndex = data.index;
+    const dragType = data.type;
+
+    // Only allow reordering within the same type
+    if (dragType !== dropType) return;
+
+    // Get arrays for each type
+    let incomeItems = localCategoryItems.filter(i => i.type === TransactionType.INCOME);
+    let expenseItems = localCategoryItems.filter(i => i.type === TransactionType.EXPENSE);
+
+    // modify the relevant list
+    if (dropType === TransactionType.INCOME) {
+      const [movedItem] = incomeItems.splice(dragIndex, 1);
+      incomeItems.splice(dropIndex, 0, movedItem);
+    } else {
+      const [movedItem] = expenseItems.splice(dragIndex, 1);
+      expenseItems.splice(dropIndex, 0, movedItem);
+    }
+
+    // Always combine Income then Expense for consistent dropdown order
+    setLocalCategoryItems([...incomeItems, ...expenseItems]);
+  };
+
   // Category List Renderer Helper
   const renderCategoryList = (type: TransactionType) => {
     const items = localCategoryItems.filter(i => i.type === type);
     return (
       <div className="flex flex-col gap-2 max-h-48 overflow-y-auto custom-scrollbar p-2 border rounded-lg bg-gray-50 min-h-[100px] content-start">
-        {items.map(item => (
-          <div key={item.id} className="flex items-center gap-2 bg-white border border-gray-200 px-2 py-1.5 rounded text-sm text-gray-700 shadow-sm justify-between">
+        {items.map((item, index) => (
+          <div
+            key={item.id}
+            draggable={editingCatId !== item.id}
+            onDragStart={(e) => handleCategoryDragStart(e, index, type)}
+            onDragOver={handleCategoryDragOver}
+            onDrop={(e) => handleCategoryDrop(e, index, type)}
+            className={`flex items-center gap-2 bg-white border border-gray-200 px-2 py-1.5 rounded text-sm text-gray-700 shadow-sm justify-between hover:shadow-md transition-shadow ${editingCatId !== item.id ? 'cursor-move' : ''}`}
+          >
             <div className="flex items-center gap-2 flex-1">
+              <span className="text-gray-400 cursor-grab active:cursor-grabbing" title="Drag to reorder">⋮⋮</span>
               <input
                 type="color"
                 value={item.color}
                 onChange={(e) => updateCategoryItem(item.id, { color: e.target.value })}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="w-5 h-5 p-0 border-0 rounded cursor-pointer shrink-0"
                 title="Change Color"
               />
@@ -555,6 +601,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onChange={(e) => updateCategoryItem(item.id, { name: e.target.value })}
                   onBlur={() => setEditingCatId(null)}
                   onKeyDown={(e) => e.key === 'Enter' && setEditingCatId(null)}
+                  onMouseDown={(e) => e.stopPropagation()}
                   autoFocus
                   className="flex-1 p-1 -my-1 border border-blue-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                 />
@@ -570,6 +617,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setEditingCatId(editingCatId === item.id ? null : item.id)}
+                onMouseDown={(e) => e.stopPropagation()}
                 className={`p-1 rounded hover:bg-gray-100 ${editingCatId === item.id ? 'text-green-500' : 'text-gray-400'}`}
                 title={editingCatId === item.id ? "Finish Editing" : "Edit Name"}
               >
@@ -577,6 +625,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </button>
               <button
                 onClick={() => removeCategoryItem(item.id)}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="p-1 text-gray-400 hover:text-red-500 hover:bg-gray-100 rounded"
                 title="Delete Category"
               >
@@ -628,6 +677,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const updateMemberItem = (id: string, updates: Partial<MemberItem>) => {
     setLocalMembers(localMembers.map(m => m.id === id ? { ...m, ...updates } : m));
+  };
+
+  // Drag and drop handlers for members
+  const handleMemberDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleMemberDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleMemberDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
+
+    const items = [...localMembers];
+    const [movedItem] = items.splice(dragIndex, 1);
+    items.splice(dropIndex, 0, movedItem);
+
+    setLocalMembers(items);
   };
 
   const currencyOptions = AVAILABLE_CURRENCIES.map(c => ({
@@ -799,13 +870,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {memberError && <p className="text-xs text-red-500 mb-2 ml-9">{memberError}</p>}
 
                   <div className="flex flex-col gap-2 max-h-48 overflow-y-auto custom-scrollbar p-2 border rounded-lg bg-gray-50 min-h-[100px] content-start">
-                    {localMembers.map(mem => (
-                      <div key={mem.id} className="flex items-center gap-2 bg-white border border-gray-200 px-2 py-1.5 rounded text-sm text-gray-700 shadow-sm justify-between">
+                    {localMembers.map((mem, index) => (
+                      <div
+                        key={mem.id}
+                        draggable={editingMemId !== mem.id}
+                        onDragStart={(e) => handleMemberDragStart(e, index)}
+                        onDragOver={handleMemberDragOver}
+                        onDrop={(e) => handleMemberDrop(e, index)}
+                        className={`flex items-center gap-2 bg-white border border-gray-200 px-2 py-1.5 rounded text-sm text-gray-700 shadow-sm justify-between hover:shadow-md transition-shadow ${editingMemId !== mem.id ? 'cursor-move' : ''}`}
+                      >
                         <div className="flex items-center gap-2 flex-1">
+                          <span className="text-gray-400 cursor-grab active:cursor-grabbing" title="Drag to reorder">⋮⋮</span>
                           <input
                             type="color"
                             value={mem.color}
                             onChange={(e) => updateMemberItem(mem.id, { color: e.target.value })}
+                            onMouseDown={(e) => e.stopPropagation()}
                             className="w-5 h-5 p-0 border-0 rounded cursor-pointer shrink-0"
                             title="Change Color"
                           />
@@ -816,6 +896,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               onChange={(e) => updateMemberItem(mem.id, { name: e.target.value })}
                               onBlur={() => setEditingMemId(null)}
                               onKeyDown={(e) => e.key === 'Enter' && setEditingMemId(null)}
+                              onMouseDown={(e) => e.stopPropagation()}
                               autoFocus
                               className="flex-1 p-1 -my-1 border border-blue-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                             />
@@ -831,6 +912,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => setEditingMemId(editingMemId === mem.id ? null : mem.id)}
+                            onMouseDown={(e) => e.stopPropagation()}
                             className={`p-1 rounded hover:bg-gray-100 ${editingMemId === mem.id ? 'text-green-500' : 'text-gray-400'}`}
                             title={editingMemId === mem.id ? "Finish Editing" : "Edit Name"}
                           >
@@ -838,6 +920,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </button>
                           <button
                             onClick={() => handleRemoveMember(mem.id)}
+                            onMouseDown={(e) => e.stopPropagation()}
                             className={`p-1 rounded transition-colors ${memberDeleteId === mem.id ? 'bg-red-50 text-red-600' : 'text-gray-400 hover:text-red-500 hover:bg-gray-100'}`}
                             title={memberDeleteId === mem.id ? "Click again to confirm" : "Delete Member"}
                           >
