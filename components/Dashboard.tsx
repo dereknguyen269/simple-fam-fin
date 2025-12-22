@@ -605,7 +605,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 tickLine={false}
                 axisLine={false}
                 tick={{ fontSize: 12, fill: '#6b7280' }}
-                tickFormatter={(value) => `${currencyConfig.symbol}${value}`}
+                tickFormatter={(value) => {
+                  // Compact formatting for Y-axis to prevent cutoff
+                  if (value >= 1000000) {
+                    return `${currencyConfig.symbol}${(value / 1000000).toFixed(1)}M`;
+                  } else if (value >= 1000) {
+                    return `${currencyConfig.symbol}${(value / 1000).toFixed(1)}K`;
+                  }
+                  return `${currencyConfig.symbol}${value}`;
+                }}
               />
               <Tooltip
                 formatter={(value: number) => formatValue(value)}
@@ -760,7 +768,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
               >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
-                <YAxis />
+                <YAxis
+                  tickFormatter={(value) => {
+                    // Compact formatting for Y-axis to prevent cutoff
+                    if (value >= 1000000) {
+                      return `${currencyConfig.symbol}${(value / 1000000).toFixed(1)}M`;
+                    } else if (value >= 1000) {
+                      return `${currencyConfig.symbol}${(value / 1000).toFixed(1)}K`;
+                    }
+                    return `${currencyConfig.symbol}${value}`;
+                  }}
+                />
                 <Tooltip formatter={(value: number) => formatValue(value)} />
                 <Legend />
                 <Bar dataKey="value" name="Amount Spent" radius={[4, 4, 0, 0]}>
@@ -789,7 +807,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
-              <YAxis />
+              <YAxis
+                tickFormatter={(value) => {
+                  // Compact formatting for Y-axis to prevent cutoff
+                  if (value >= 1000000) {
+                    return `${currencyConfig.symbol}${(value / 1000000).toFixed(1)}M`;
+                  } else if (value >= 1000) {
+                    return `${currencyConfig.symbol}${(value / 1000).toFixed(1)}K`;
+                  }
+                  return `${currencyConfig.symbol}${value}`;
+                }}
+              />
               <Tooltip formatter={(value: number) => formatValue(value)} />
               <Legend />
               <Bar dataKey="value" name="Avg. Amount" fill="#FF8042" radius={[4, 4, 0, 0]} />
