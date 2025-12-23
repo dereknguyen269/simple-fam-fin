@@ -44,9 +44,11 @@ let gapiInited = false;
 let gisInited = false;
 
 export const initializeGapiClient = async (config: GoogleConfig): Promise<void> => {
+  console.log('🟢 [DEBUG] initializeGapiClient called with config:', { clientId: config.clientId?.substring(0, 20) + '...', apiKey: config.apiKey?.substring(0, 10) + '...' });
   return new Promise((resolve, reject) => {
     // Validate required config before attempting init
     if (!config.clientId || !config.apiKey) {
+      console.log('🔴 [DEBUG] initializeGapiClient: Missing clientId or apiKey');
       reject(new Error("Missing required parameter client_id or apiKey"));
       return;
     }
@@ -141,6 +143,7 @@ export const checkOAuthCallback = (): { access_token?: string; error?: string } 
 };
 
 export const handleAuthClick = (clientId?: string): Promise<void> => {
+  console.log('🔵 [DEBUG] handleAuthClick called');
   return new Promise((resolve, reject) => {
     if (!tokenClient) {
       reject("Token client not initialized");
@@ -195,8 +198,10 @@ export const handleAuthClick = (clientId?: string): Promise<void> => {
 };
 
 export const trySilentAuth = (): Promise<void> => {
+  console.log('🟡 [DEBUG] trySilentAuth called');
   return new Promise((resolve, reject) => {
     if (!tokenClient) {
+      console.log('🔴 [DEBUG] trySilentAuth: Token client not initialized');
       reject("Token client not initialized");
       return;
     }
@@ -206,37 +211,57 @@ export const trySilentAuth = (): Promise<void> => {
       return;
     }
 
-    console.log("Attempting silent token refresh...");
+    // Set up a timeout to prevent hanging
+    const timeoutId = setTimeout(() => {
+      reject({ error: 'timeout', message: 'Silent auth timed out', expected: true });
+    }, 5000); // 5 second timeout
 
     tokenClient.callback = async (resp: any) => {
+      clearTimeout(timeoutId);
+
       if (resp.error) {
-        // Silent auth failed
-        console.warn("Silent auth failed:", resp.error);
-        reject(resp);
+        // Silent auth failed - this is expected if user needs to re-authenticate
+        // Don't log as error, just as info
+        if (resp.error === 'interaction_required' || resp.error === 'access_denied') {
+          // Expected errors - user needs to manually authenticate
+          reject({ error: resp.error, expected: true });
+        } else {
+          // Unexpected errors
+          console.warn("Silent auth failed:", resp.error);
+          reject(resp);
+        }
       } else {
         // Silent auth success
         if (resp.access_token && window.gapi.client) {
           window.gapi.client.setToken(resp);
           saveGoogleToken(resp);
-          console.log("Silent token refresh successful");
+          console.log("✓ Silent token refresh successful");
         }
         resolve();
       }
     };
 
     // Attempt to get token without prompt using 'none'
+    console.log('🟡 [DEBUG] trySilentAuth: Requesting access token with prompt=none');
     try {
       tokenClient.requestAccessToken({ prompt: 'none' });
     } catch (error) {
-      console.error("Error requesting silent token:", error);
-      reject(error);
+      clearTimeout(timeoutId);
+      // Suppress COOP-related errors as they're expected in silent auth
+      if (error instanceof Error && error.message.includes('Cross-Origin')) {
+        reject({ error: 'coop_blocked', expected: true });
+      } else {
+        console.error("Error requesting silent token:", error);
+        reject(error);
+      }
     }
   });
 };
 
 /**
- * Automatically refresh token if needed
- * Returns true if token is valid (either already valid or successfully refreshed)
+ * Check if token is valid
+ * Returns true if token exists (we don't proactively refresh to avoid popup)
+ * If token expires, API calls will fail and user will be prompted to reconnect
  */
 export const ensureValidToken = async (): Promise<boolean> => {
   try {
@@ -253,15 +278,17 @@ export const ensureValidToken = async (): Promise<boolean> => {
 
     // Check if token needs refresh (within 5 minutes of expiry)
     if (shouldRefreshToken()) {
-      console.log("Token expiring soon, attempting proactive refresh...");
-      try {
-        await trySilentAuth();
-        return true;
-      } catch (error) {
-        console.warn("Proactive token refresh failed:", error);
-        // Token might still be valid for a few more minutes
-        return true;
-      }
+      console.log("⚠️ Token expiring soon. Will need to reconnect when it expires.");
+      // DISABLED: Proactive refresh causes unwanted popup
+      // Instead, let token expire naturally and handle auth errors in API calls
+      // try {
+      //   await trySilentAuth();
+      //   return true;
+      // } catch (error) {
+      //   console.warn("Proactive token refresh failed:", error);
+      //   return true;
+      // }
+      return true; // Just return true and let token be used until it expires
     }
 
     return true;
@@ -294,7 +321,7 @@ const expenseToRow = (e: Expense): (string | number)[] => {
     e.id,
     e.date,
     e.type || TransactionType.EXPENSE,
-    e.description,
+    e.description || '', // Ensure description is always a string
     e.category,
     e.member,
     e.amount,
@@ -313,7 +340,7 @@ const rowToExpense = (row: any[], walletId: string): Expense | null => {
     id: row[0],
     date: row[1],
     type: (row[2] as TransactionType) || TransactionType.EXPENSE,
-    description: row[3],
+    description: row[3] || '', // Ensure description is always a string
     category: row[4],
     member: row[5],
     amount: Number(row[6]),

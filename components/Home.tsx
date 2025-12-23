@@ -78,14 +78,17 @@ export const Home: React.FC<HomeProps> = ({
   }, [todayTransactions]);
 
   const handleSaveTransaction = (data: Partial<Expense>) => {
-    if (data.description && data.amount !== undefined && data.date) {
+    // Allow empty description - only validate amount and date
+    if (data.amount !== undefined && data.date) {
       const baseAmount = convertToBase(data.amount, currencyConfig);
       const type = data.type || TransactionType.EXPENSE;
+      const description = data.description || ''; // Ensure description is always a string
 
       if (editingExpense && onUpdateExpense) {
         onUpdateExpense({
           ...editingExpense,
           ...data,
+          description, // Use sanitized description
           amount: baseAmount,
           category: data.category!,
           member: data.member!,
@@ -97,7 +100,7 @@ export const Home: React.FC<HomeProps> = ({
         // Add Expense
         onAddExpense({
           date: data.date,
-          description: data.description,
+          description, // Use sanitized description
           amount: baseAmount,
           category: data.category!,
           member: data.member!,
@@ -110,7 +113,7 @@ export const Home: React.FC<HomeProps> = ({
         // Add Recurring Rule if requested
         if (data.recurrence && onAddRecurring) {
           onAddRecurring({
-            description: data.description,
+            description: description || 'Recurring', // Fallback for recurring
             category: data.category!,
             amount: baseAmount,
             member: data.member!,

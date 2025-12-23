@@ -75,6 +75,32 @@
   }
 }
 </script>
+  <!-- Suppress COOP warnings from Google OAuth (expected in dev mode) -->
+  <script>
+    // Suppress expected COOP warnings from Google's OAuth library
+    const originalError = console.error;
+    console.error = function(...args) {
+      const message = args[0]?.toString() || '';
+      // Filter out COOP-related errors from Google's library
+      if (message.includes('Cross-Origin-Opener-Policy') || 
+          message.includes('window.closed') ||
+          message.includes('window.opener')) {
+        return; // Suppress these expected warnings
+      }
+      originalError.apply(console, args);
+    };
+
+    // Also suppress Chrome extension connection errors (common in dev)
+    const originalWarn = console.warn;
+    console.warn = function(...args) {
+      const message = args[0]?.toString() || '';
+      if (message.includes('runtime.lastError') || 
+          message.includes('Receiving end does not exist')) {
+        return; // Suppress extension-related warnings
+      }
+      originalWarn.apply(console, args);
+    };
+  </script>
   <!-- Google API Scripts -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>

@@ -240,7 +240,8 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
     const dataToSave: Partial<Expense> = {
       ...formData,
-      amount: finalAmount
+      amount: finalAmount,
+      description: formData.description || '' // Ensure description is always a string
     }
 
     onSave(dataToSave);

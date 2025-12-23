@@ -244,8 +244,10 @@ export const saveGoogleToken = (token: any): void => {
       // Calculate expiry time (tokens typically expire in 1 hour)
       const expiryTime = Date.now() + (token.expires_in ? token.expires_in * 1000 : 3600000);
       localStorage.setItem(GOOGLE_TOKEN_EXPIRY_KEY, String(expiryTime));
-      
-      console.log(`Token saved. Expires in ${token.expires_in || 3600} seconds at ${new Date(expiryTime).toLocaleTimeString()}`);
+
+      console.log(`🟢 [DEBUG] Token saved. Expires in ${token.expires_in || 3600} seconds at ${new Date(expiryTime).toLocaleTimeString()}`);
+    } else {
+      console.log('🔴 [DEBUG] saveGoogleToken: Invalid token, not saving');
     }
   } catch (e) {
     console.error("Failed to save Google token", e);
@@ -256,6 +258,8 @@ export const getGoogleToken = (): any | null => {
   try {
     const tokenData = localStorage.getItem(GOOGLE_TOKEN_KEY);
     const expiryData = localStorage.getItem(GOOGLE_TOKEN_EXPIRY_KEY);
+
+    console.log('🟡 [DEBUG] getGoogleToken: Token exists?', tokenData ? 'Yes' : 'No', '| Expiry exists?', expiryData ? 'Yes' : 'No');
 
     if (!tokenData || !expiryData) return null;
 
@@ -311,7 +315,7 @@ export const getTokenTimeRemaining = (): number => {
     const expiryTime = parseInt(expiryData);
     const now = Date.now();
     const remaining = Math.max(0, Math.floor((expiryTime - now) / 1000));
-    
+
     return remaining;
   } catch (e) {
     return 0;

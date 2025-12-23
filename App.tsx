@@ -323,27 +323,45 @@ const App: React.FC = () => {
 
       // Check Google Config
       const config = getGoogleConfig();
+      console.log('🟢 [DEBUG] App Init: Google config loaded:', config ? 'Yes' : 'No');
       if (config && config.clientId && config.apiKey) {
         setGoogleConfig(config);
 
         try {
+          console.log('🟢 [DEBUG] App Init: Initializing GAPI client...');
           await initializeGapiClient(config);
 
           if (getGoogleSyncEnabled()) {
+            console.log('🟢 [DEBUG] App Init: Google Sync is enabled');
             // Check if we have a valid token already
             let hasToken = window.gapi?.client?.getToken();
+            console.log('🟡 [DEBUG] App Init: Has token in memory?', hasToken ? 'Yes' : 'No');
 
+            // Only attempt silent auth if we have a SAVED token to refresh
+            // Don't attempt silent auth for initial authentication (would trigger popup)
             if (!hasToken) {
-              try {
-                console.log("Token expired or missing, attempting silent auth...");
-                await trySilentAuth();
-                hasToken = window.gapi?.client?.getToken();
-              } catch (e) {
-                console.warn("Silent auth attempt failed", e);
+              const savedToken = getGoogleToken();
+              console.log('🟡 [DEBUG] App Init: Has saved token in storage?', savedToken ? 'Yes' : 'No');
+              if (savedToken && savedToken.access_token) {
+                console.log('🟡 [DEBUG] App Init: Attempting silent token refresh...');
+                // We have a saved token, try to refresh it silently
+                try {
+                  await trySilentAuth();
+                  hasToken = window.gapi?.client?.getToken();
+                  console.log('✅ [DEBUG] App Init: Silent refresh result:', hasToken ? 'Success' : 'Failed');
+                } catch (e: any) {
+                  // Only log if it's not an expected error
+                  if (!e?.expected) {
+                    console.warn("Silent token refresh failed:", e);
+                  }
+                  // If silent refresh fails, user will need to reconnect manually
+                }
               }
+              // If no saved token, don't attempt silent auth - let user click Connect
             }
 
             if (hasToken) {
+              console.log('🟢 [DEBUG] App Init: Has valid token, fetching data...');
               // We have a token, try to use it
               try {
                 setIsSyncing(true);
@@ -492,11 +510,13 @@ const App: React.FC = () => {
         try {
           const tokenValid = await ensureValidToken();
           if (!tokenValid) {
-            console.warn('Token validation failed before save, attempting silent auth...');
             await trySilentAuth();
           }
-        } catch (tokenError) {
-          console.warn('Token refresh attempt failed before save:', tokenError);
+        } catch (tokenError: any) {
+          // Only log unexpected errors
+          if (!tokenError?.expected) {
+            console.warn('Token refresh attempt failed before save:', tokenError);
+          }
           // Continue with save attempt - might still work if token is valid
         }
 
@@ -587,11 +607,13 @@ const App: React.FC = () => {
         try {
           const tokenValid = await ensureValidToken();
           if (!tokenValid) {
-            console.warn('Token validation failed, attempting silent auth...');
             await trySilentAuth();
           }
-        } catch (tokenError) {
-          console.warn('Token refresh attempt failed, will try API call anyway:', tokenError);
+        } catch (tokenError: any) {
+          // Only log unexpected errors
+          if (!tokenError?.expected) {
+            console.warn('Token refresh attempt failed, will try API call anyway:', tokenError);
+          }
         }
 
         setSyncStatus('fetching');
@@ -629,12 +651,14 @@ const App: React.FC = () => {
         // Handle auth errors
         if (e.status === 401 || e.status === 403) {
           try {
-            console.log("Auth error during poll, attempting silent refresh...");
             await trySilentAuth();
-            console.log("Silent refresh successful.");
+            console.log("✓ Silent refresh successful during poll recovery");
             // Do not disconnect. Next poll will pick up the new token.
-          } catch (refreshErr) {
-            console.warn("Silent refresh failed during poll", refreshErr);
+          } catch (refreshErr: any) {
+            // Only log and disconnect for unexpected errors
+            if (!refreshErr?.expected) {
+              console.warn("Silent refresh failed during poll:", refreshErr);
+            }
             setIsGoogleConnected(false);
             setSyncStatus('error');
             setSyncError('Authentication expired. Please reconnect.');
@@ -813,13 +837,17 @@ const App: React.FC = () => {
     const newExpense: Expense = {
       ...newExpenseData,
       id: Date.now().toString(),
-      walletId: newExpenseData.walletId || 'main'
+      walletId: newExpenseData.walletId || 'main',
+      description: newExpenseData.description || '' // Ensure description is always a string
     };
     setExpenses(prev => [newExpense, ...prev]);
   };
 
   const updateExpense = (updatedExpense: Expense) => {
-    setExpenses(prev => prev.map(e => e.id === updatedExpense.id ? updatedExpense : e));
+    setExpenses(prev => prev.map(e => e.id === updatedExpense.id ? {
+      ...updatedExpense,
+      description: updatedExpense.description || '' // Ensure description is always a string
+    } : e));
   };
 
   const deleteExpense = (id: string) => {
@@ -955,6 +983,7 @@ const App: React.FC = () => {
   };
 
   const handleConnectGoogle = async (config: GoogleConfig, refOverrides?: { categories: CategoryItem[], members: MemberItem[] }) => {
+    console.log('🔵 [DEBUG] handleConnectGoogle called');
     setGoogleConfig(config);
     saveGoogleConfig(config);
 
@@ -983,7 +1012,9 @@ const App: React.FC = () => {
 
       // Check if we already have a token to avoid opening popup unnecessarily
       const savedToken = getGoogleToken();
+      console.log('🟡 [DEBUG] handleConnectGoogle: Has saved token?', savedToken ? 'Yes' : 'No');
       if (!savedToken) {
+        console.log('🔵 [DEBUG] handleConnectGoogle: Calling handleAuthClick (popup expected)');
         await handleAuthClick(config.clientId);
       }
 
