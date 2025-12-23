@@ -49,6 +49,29 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Load conversation history from knowledge base on mount
+  useEffect(() => {
+    const loadKnowledge = async () => {
+      const { getAIKnowledge } = await import('../services/aiKnowledgeService');
+      const knowledge = getAIKnowledge();
+      if (knowledge?.conversationHistory && knowledge.conversationHistory.length > 0) {
+        setMessages(knowledge.conversationHistory);
+      }
+    };
+    loadKnowledge();
+  }, []);
+
+  // Save conversation history whenever messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      const saveKnowledge = async () => {
+        const { updateConversationHistory } = await import('../services/aiKnowledgeService');
+        updateConversationHistory(messages);
+      };
+      saveKnowledge();
+    }
+  }, [messages]);
+
   // Focus input when opening
   useEffect(() => {
     if (isOpen && !isMinimized) {
@@ -100,7 +123,10 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
 
       // Stream the response
       let fullResponse = '';
-      for await (const chunk of sendMessageStream(aiProvider, aiApiKey, userMessage.content, context)) {
+      // Pass previous messages as conversation history (exclude the current assistant placeholder)
+      const conversationHistory = messages.filter(msg => msg.id !== assistantMessageId);
+
+      for await (const chunk of sendMessageStream(aiProvider, aiApiKey, userMessage.content, context, conversationHistory)) {
         fullResponse += chunk;
         setMessages(prev =>
           prev.map(msg =>
@@ -136,9 +162,11 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     setTimeout(() => handleSendMessage(), 100);
   };
 
-  const handleClearChat = () => {
+  const handleClearChat = async () => {
     setMessages([]);
     setError(null);
+    const { clearAIKnowledge } = await import('../services/aiKnowledgeService');
+    clearAIKnowledge();
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
