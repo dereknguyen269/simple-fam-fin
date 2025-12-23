@@ -133,3 +133,29 @@ export interface UserProfile {
   email: string;
   picture: string;
 }
+
+export enum AIProvider {
+  GEMINI = 'gemini',
+  CHATGPT = 'chatgpt',
+  CLAUDE = 'claude',
+  OPENROUTER = 'openrouter'
+}
+
+export interface AIConfig {
+  provider: AIProvider;
+  apiKeys: {
+    [AIProvider.GEMINI]?: string;
+    [AIProvider.CHATGPT]?: string;
+    [AIProvider.CLAUDE]?: string;
+    [AIProvider.OPENROUTER]?: string;
+  };
+  enabled: boolean;
+}
+
+export interface AIMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  isStreaming?: boolean;
+}

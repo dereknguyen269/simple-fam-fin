@@ -322,3 +322,28 @@ export const getTokenTimeRemaining = (): number => {
   }
 };
 
+// --- AI CONFIGURATION ---
+const AI_CONFIG_KEY = 'family_finance_ai_config';
+
+export const getAIConfig = (): import('../types').AIConfig | null => {
+  try {
+    const data = localStorage.getItem(AI_CONFIG_KEY);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.error("Failed to load AI config", e);
+    return null;
+  }
+};
+
+export const saveAIConfig = (config: import('../types').AIConfig): void => {
+  try {
+    localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
+  } catch (e) {
+    console.error("Failed to save AI config", e);
+  }
+};
+
+export const clearAIConfig = (): void => {
+  localStorage.removeItem(AI_CONFIG_KEY);
+};
+

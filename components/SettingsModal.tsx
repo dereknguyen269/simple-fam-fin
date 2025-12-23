@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Save, Database, AlertCircle, Coins, HelpCircle, ChevronDown, ChevronUp, ExternalLink, Copy, Check, FileSpreadsheet, RotateCcw, Trash2, Unplug, List, Plus, Pencil, ArrowUpCircle, ArrowDownCircle, User, Share2, Download, Upload, Shield } from 'lucide-react';
-import { GoogleConfig, CurrencyCode, CategoryItem, TransactionType, MemberItem, UserProfile } from '../types';
-import { getGoogleConfig, saveGoogleConfig, getCurrencyCode, saveCurrencyCode } from '../services/storageService';
+import { X, Save, Database, AlertCircle, Coins, HelpCircle, ChevronDown, ChevronUp, ExternalLink, Copy, Check, FileSpreadsheet, RotateCcw, Trash2, Unplug, List, Plus, Pencil, ArrowUpCircle, ArrowDownCircle, User, Share2, Download, Upload, Shield, Sparkles, Loader2 } from 'lucide-react';
+import { GoogleConfig, CurrencyCode, CategoryItem, TransactionType, MemberItem, UserProfile, AIConfig, AIProvider } from '../types';
+import { getGoogleConfig, saveGoogleConfig, getCurrencyCode, saveCurrencyCode, getAIConfig, saveAIConfig } from '../services/storageService';
 import { AVAILABLE_CURRENCIES, CURRENCY_RATES, CURRENCY_SYMBOLS } from '../constants';
 import { CustomSelect } from './CustomSelect';
 import { Dialog } from './Dialog';
@@ -26,6 +26,7 @@ interface SettingsModalProps {
   onRenameCategory: (oldName: string, newName: string) => void;
   userProfile?: UserProfile | null;
   asPage?: boolean; // New prop to render as page instead of modal
+  onAIConfigChange?: (config: AIConfig) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -43,7 +44,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateMembers,
   onRenameCategory,
   userProfile,
-  asPage = false }) => {
+  asPage = false,
+  onAIConfigChange }) => {
   const [config, setConfig] = useState<GoogleConfig>({
     clientId: '',
     apiKey: '',
@@ -97,6 +99,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Safe origin detection
   const [currentOrigin, setCurrentOrigin] = useState('');
   const [isSafari, setIsSafari] = useState(false);
+
+  // AI Configuration State
+  const [aiConfig, setAIConfig] = useState<AIConfig>({
+    provider: AIProvider.GEMINI,
+    apiKeys: {},
+    enabled: false
+  });
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState<'success' | 'error' | null>(null);
 
   // Helper to show dialog
   const showDialog = (
@@ -153,6 +164,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     const savedCurrency = getCurrencyCode();
     setCurrency(savedCurrency);
+
+    // Load AI configuration
+    const savedAIConfig = getAIConfig();
+    if (savedAIConfig) {
+      setAIConfig(savedAIConfig);
+    }
   }, [isOpen]);
 
   // Update config when toggling managed service
@@ -208,7 +225,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onUpdateCategoryItems(localCategoryItems);
     onUpdateMembers(localMembers);
 
+    // Save AI configuration
+    saveAIConfig(aiConfig);
+    if (onAIConfigChange) {
+      onAIConfigChange(aiConfig);
+    }
+
     onClose();
+  };
+
+  const handleTestAIConnection = async () => {
+    const apiKey = aiConfig.apiKeys[aiConfig.provider];
+    if (!apiKey) {
+      setConnectionTestResult('error');
+      return;
+    }
+
+    setIsTestingConnection(true);
+    setConnectionTestResult(null);
+
+    try {
+      const { testConnection } = await import('../services/aiService');
+      const result = await testConnection(aiConfig.provider, apiKey);
+      setConnectionTestResult(result ? 'success' : 'error');
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      setConnectionTestResult('error');
+    } finally {
+      setIsTestingConnection(false);
+      setTimeout(() => setConnectionTestResult(null), 3000);
+    }
+  };
+
+  const handleClearAIKey = () => {
+    setAIConfig(prev => ({
+      ...prev,
+      apiKeys: {
+        ...prev.apiKeys,
+        [prev.provider]: undefined
+      }
+    }));
   };
 
   const handleDisconnect = () => {
@@ -1216,6 +1272,153 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+
+
+            {/* AI Assistant Section */}
+            <div className="space-y-4 pb-4 border-b border-gray-100">
+              <h3 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+                <Sparkles className="text-purple-500" size={20} />
+                AI Assistant
+              </h3>
+              <p className="text-xs text-gray-500 -mt-2">
+                Configure AI provider to get personalized financial insights and suggestions.
+              </p>
+
+              {/* Enable/Disable Toggle */}
+              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-100">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Enable AI Assistant</p>
+                  <p className="text-xs text-gray-600 mt-0.5">Get AI-powered financial advice</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={aiConfig.enabled}
+                    onChange={(e) => setAIConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+
+              {aiConfig.enabled && (
+                <>
+                  {/* Provider Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">AI Provider</label>
+                    <select
+                      value={aiConfig.provider}
+                      onChange={(e) => {
+                        setAIConfig(prev => ({ ...prev, provider: e.target.value as AIProvider }));
+                        setConnectionTestResult(null);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white text-gray-900"
+                    >
+                      <option value={AIProvider.GEMINI}>Google Gemini</option>
+                      <option value={AIProvider.CHATGPT}>OpenAI ChatGPT</option>
+                      <option value={AIProvider.CLAUDE}>Anthropic Claude</option>
+                      <option value={AIProvider.OPENROUTER}>OpenRouter</option>
+                    </select>
+                  </div>
+
+                  {/* API Key Input */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      API Key
+                      {aiConfig.apiKeys[aiConfig.provider] && (
+                        <span className="ml-2 text-xs text-green-600">✓ Configured</span>
+                      )}
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white text-gray-900"
+                        placeholder={`Enter your ${aiConfig.provider} API key`}
+                        value={aiConfig.apiKeys[aiConfig.provider] || ''}
+                        onChange={(e) => setAIConfig(prev => ({
+                          ...prev,
+                          apiKeys: {
+                            ...prev.apiKeys,
+                            [prev.provider]: e.target.value
+                          }
+                        }))}
+                      />
+                      {aiConfig.apiKeys[aiConfig.provider] && (
+                        <button
+                          onClick={handleClearAIKey}
+                          className="px-3 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Clear API Key"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {aiConfig.provider === AIProvider.GEMINI && (
+                        <>Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">Google AI Studio</a></>
+                      )}
+                      {aiConfig.provider === AIProvider.CHATGPT && (
+                        <>Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">OpenAI Platform</a></>
+                      )}
+                      {aiConfig.provider === AIProvider.CLAUDE && (
+                        <>Get your API key from <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">Anthropic Console</a></>
+                      )}
+                      {aiConfig.provider === AIProvider.OPENROUTER && (
+                        <>Get your API key from <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">OpenRouter</a></>
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Test Connection Button */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleTestAIConnection}
+                      disabled={!aiConfig.apiKeys[aiConfig.provider] || isTestingConnection}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2 text-sm"
+                    >
+                      {isTestingConnection ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          Testing...
+                        </>
+                      ) : (
+                        <>
+                          <Shield size={16} />
+                          Test Connection
+                        </>
+                      )}
+                    </button>
+
+                    {connectionTestResult === 'success' && (
+                      <span className="text-sm text-green-600 flex items-center gap-1">
+                        <Check size={16} />
+                        Connection successful!
+                      </span>
+                    )}
+                    {connectionTestResult === 'error' && (
+                      <span className="text-sm text-red-600 flex items-center gap-1">
+                        <AlertCircle size={16} />
+                        Connection failed
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Security Warning */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={16} />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-amber-900 mb-1">🔒 Security Note</h4>
+                        <p className="text-xs text-amber-800">
+                          API keys are stored locally in your browser. Keep them secure and never share them.
+                          You are responsible for any API usage costs from your provider.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
 
