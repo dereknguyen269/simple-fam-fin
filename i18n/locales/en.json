@@ -376,5 +376,28 @@
     "permissionDenied": "Permission denied. Please check your access rights.",
     "notFound": "Resource not found.",
     "unknownError": "An unknown error occurred. Please try again."
+  },
+  "ai": {
+    "title": "AI Assistant",
+    "welcome": "Hi! I'm your AI financial assistant. Ask me anything about your finances!",
+    "chatPlaceholder": "Ask me about your finances...",
+    "send": "Send",
+    "clear": "Clear Chat",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "minimized": "Chat minimized",
+    "thinking": "Thinking...",
+    "quickActions": {
+      "title": "Quick Actions:",
+      "analyzeSpending": "Analyze my spending",
+      "budgetSuggestions": "Budget suggestions",
+      "savingsTips": "Savings tips",
+      "categorizeExpense": "Help categorize expenses"
+    },
+    "errors": {
+      "noApiKey": "Please configure an AI provider in Settings",
+      "apiError": "Failed to connect to AI provider. Please check your API key.",
+      "invalidKey": "Invalid API key"
+    }
   }
 }

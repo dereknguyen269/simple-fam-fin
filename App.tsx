@@ -13,7 +13,9 @@ import {
   CurrencyCode,
   TransactionType,
   CurrencyConfig,
-  UserProfile
+  UserProfile,
+  AIConfig,
+  AIProvider
 } from './types';
 import {
   CURRENCY_SYMBOLS,
@@ -46,7 +48,9 @@ import {
   setSetupComplete,
   getCategoryColorsMap,
   getGoogleToken,
-  saveGoogleToken
+  saveGoogleToken,
+  getAIConfig,
+  saveAIConfig
 } from './services/storageService';
 import {
   initializeGapiClient,
@@ -85,6 +89,7 @@ import { TermsPage } from './components/TermsPage';
 import { CookiesPage } from './components/CookiesPage';
 import { ContactPage } from './components/ContactPage';
 import { ReconnectModal } from './components/ReconnectModal';
+import { AIAssistant } from './components/AIAssistant';
 import {
   Wallet as WalletIcon,
   LayoutDashboard,
@@ -167,6 +172,13 @@ const App: React.FC = () => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  // AI Assistant State
+  const [aiConfig, setAIConfig] = useState<AIConfig>({
+    provider: AIProvider.GEMINI,
+    apiKeys: {},
+    enabled: false
+  });
 
   // Dialog state
   const [dialogState, setDialogState] = useState<{
@@ -413,6 +425,13 @@ const App: React.FC = () => {
           setSyncStatus('offline');
         }
       }
+
+      // Load AI configuration
+      const savedAIConfig = getAIConfig();
+      if (savedAIConfig) {
+        setAIConfig(savedAIConfig);
+      }
+
       setIsLoading(false);
     };
 
@@ -1370,6 +1389,10 @@ const App: React.FC = () => {
         onUpdateMembers={handleUpdateMembers}
         onRenameCategory={handleRenameCategory}
         userProfile={userProfile}
+        onAIConfigChange={(config) => {
+          setAIConfig(config);
+          saveAIConfig(config);
+        }}
       />
 
       <HelpModal
@@ -1830,6 +1853,18 @@ const App: React.FC = () => {
           </div>
         </nav>
       </main>
+
+      {/* AI Assistant - Floating Component */}
+      <AIAssistant
+        expenses={expenses}
+        budgets={budgets}
+        goals={goals}
+        categoryItems={categoryItems}
+        aiProvider={aiConfig.enabled ? aiConfig.provider : null}
+        aiApiKey={aiConfig.enabled && aiConfig.provider ? aiConfig.apiKeys[aiConfig.provider] || null : null}
+        enabled={aiConfig.enabled}
+        currencySymbol={CURRENCY_SYMBOLS[currencyCode]}
+      />
     </div>
   );
 };
