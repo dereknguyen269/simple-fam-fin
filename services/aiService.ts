@@ -1,4 +1,4 @@
-import { AIProvider, Expense, Budget, SavingsGoal, CategoryItem } from '../types';
+import { AIProvider, Expense, Budget, SavingsGoal, CategoryItem, AIMessage } from '../types';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // API endpoints for each provider
@@ -8,6 +8,13 @@ const API_ENDPOINTS = {
   [AIProvider.CLAUDE]: 'https://api.anthropic.com/v1/messages',
   [AIProvider.OPENROUTER]: 'https://openrouter.ai/api/v1/chat/completions'
 };
+
+/**
+ * Format amount with thousand separators
+ */
+function formatAmount(amount: number): string {
+  return amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
 
 interface FinancialContext {
   expenses: Expense[];
@@ -20,8 +27,16 @@ interface FinancialContext {
 /**
  * Generate financial context summary for AI prompts
  */
-function generateFinancialSummary(context: FinancialContext): string {
+async function generateFinancialSummary(context: FinancialContext): Promise<string> {
   const { expenses, budgets, goals, currencySymbol = '$' } = context;
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const currentMonthExpenses = expenses.filter(e => { const d = new Date(e.date); return d.getMonth() === currentMonth && d.getFullYear() === currentYear; });
+  const monthTotalExpenses = currentMonthExpenses.filter(e => e.type === 'Expense').reduce((sum, e) => sum + e.amount, 0);
+  const monthTotalIncome = currentMonthExpenses.filter(e => e.type === 'Income').reduce((sum, e) => sum + e.amount, 0);
+  const monthCategoryBreakdown = currentMonthExpenses.filter(e => e.type === 'Expense').reduce((acc, e) => { acc[e.category] = (acc[e.category] || 0) + e.amount; return acc; }, {} as Record<string, number>);
+  const monthTopCategories = Object.entries(monthCategoryBreakdown).sort(([, a], [, b]) => b - a).slice(0, 5).map(([cat, amt]) => `${cat}: ${currencySymbol}${formatAmount(amt)}`).join(', ');
 
   // Calculate basic stats
   const totalExpenses = expenses
@@ -42,15 +57,64 @@ function generateFinancialSummary(context: FinancialContext): string {
   const topCategories = Object.entries(categoryBreakdown)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5)
-    .map(([cat, amt]) => `${cat}: ${currencySymbol}${amt.toFixed(2)}`)
+    .map(([cat, amt]) => `${cat}: ${currencySymbol}${formatAmount(amt)}`)
     .join(', ');
 
-  let summary = `Financial Overview:
-- Total Income: ${currencySymbol}${totalIncome.toFixed(2)}
-- Total Expenses: ${currencySymbol}${totalExpenses.toFixed(2)}
-- Net Savings: ${currencySymbol}${(totalIncome - totalExpenses).toFixed(2)}
-- Number of Transactions: ${expenses.length}
-- Top Spending Categories: ${topCategories || 'None'}`;
+  // Get date range info
+  const oldestExpense = expenses.length > 0
+    ? new Date(Math.min(...expenses.map(e => new Date(e.date).getTime())))
+    : now;
+  const newestExpense = expenses.length > 0
+    ? new Date(Math.max(...expenses.map(e => new Date(e.date).getTime())))
+    : now;
+
+  let summary = `Today's Date: ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+Data Range: ${oldestExpense.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} to ${newestExpense.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+
+Current Month (${now.toLocaleString('default', { month: 'long', year: 'numeric' })}):
+- Income: ${currencySymbol}${formatAmount(monthTotalIncome)}
+- Expenses: ${currencySymbol}${formatAmount(monthTotalExpenses)}
+- Net Savings: ${currencySymbol}${formatAmount(monthTotalIncome - monthTotalExpenses)}
+- Transactions: ${currentMonthExpenses.length}
+- Top Categories: ${monthTopCategories || 'None'}
+
+Recent Months Breakdown:`;
+
+  // Add last 6 months breakdown
+  for (let i = 1; i <= 6; i++) {
+    const targetDate = new Date(currentYear, currentMonth - i, 1);
+    const targetMonth = targetDate.getMonth();
+    const targetYear = targetDate.getFullYear();
+
+    const monthExpenses = expenses.filter(e => {
+      const d = new Date(e.date);
+      return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
+    });
+
+    if (monthExpenses.length > 0) {
+      const monthIncome = monthExpenses.filter(e => e.type === 'Income').reduce((sum, e) => sum + e.amount, 0);
+      const monthExpense = monthExpenses.filter(e => e.type === 'Expense').reduce((sum, e) => sum + e.amount, 0);
+      const monthName = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+      const monthCategories = monthExpenses.filter(e => e.type === 'Expense').reduce((acc, e) => {
+        acc[e.category] = (acc[e.category] || 0) + e.amount;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const topCat = Object.entries(monthCategories).sort(([, a], [, b]) => b - a).slice(0, 3).map(([cat, amt]) => `${cat} (${currencySymbol}${formatAmount(amt)})`).join(', ');
+
+      summary += `\n- ${monthName}: Income ${currencySymbol}${formatAmount(monthIncome)}, Expenses ${currencySymbol}${formatAmount(monthExpense)}, Top: ${topCat || 'None'}`;
+    }
+  }
+
+  summary += `
+
+All Time Overview:
+- Total Income: ${currencySymbol}${formatAmount(totalIncome)}
+- Total Expenses: ${currencySymbol}${formatAmount(totalExpenses)}
+- Net Savings: ${currencySymbol}${formatAmount(totalIncome - totalExpenses)}
+- Total Transactions: ${expenses.length}
+- Top Categories: ${topCategories || 'None'}`;
 
   if (budgets && budgets.length > 0) {
     summary += `\n- Active Budgets: ${budgets.length}`;
@@ -58,6 +122,13 @@ function generateFinancialSummary(context: FinancialContext): string {
 
   if (goals && goals.length > 0) {
     summary += `\n- Savings Goals: ${goals.length}`;
+  }
+
+  // Add pattern detection
+  const { analyzeSpendingPatterns, generatePatternSummary } = await import('./patternDetectionService');
+  const patterns = analyzeSpendingPatterns(expenses);
+  if (patterns.length > 0) {
+    summary += `\n\n${generatePatternSummary(patterns)}`;
   }
 
   return summary;
@@ -87,7 +158,7 @@ export async function sendMessage(
   message: string,
   context: FinancialContext
 ): Promise<string> {
-  const financialSummary = generateFinancialSummary(context);
+  const financialSummary = await generateFinancialSummary(context);
 
   switch (provider) {
     case AIProvider.GEMINI:
@@ -110,22 +181,23 @@ export async function* sendMessageStream(
   provider: AIProvider,
   apiKey: string,
   message: string,
-  context: FinancialContext
+  context: FinancialContext,
+  conversationHistory: AIMessage[] = []
 ): AsyncGenerator<string, void, unknown> {
-  const financialSummary = generateFinancialSummary(context);
+  const financialSummary = await generateFinancialSummary(context);
 
   switch (provider) {
     case AIProvider.GEMINI:
-      yield* streamGemini(apiKey, message, financialSummary);
+      yield* streamGemini(apiKey, message, financialSummary, conversationHistory);
       break;
     case AIProvider.CHATGPT:
-      yield* streamChatGPT(apiKey, message, financialSummary);
+      yield* streamChatGPT(apiKey, message, financialSummary, conversationHistory);
       break;
     case AIProvider.CLAUDE:
-      yield* streamClaude(apiKey, message, financialSummary);
+      yield* streamClaude(apiKey, message, financialSummary, conversationHistory);
       break;
     case AIProvider.OPENROUTER:
-      yield* streamOpenRouter(apiKey, message, financialSummary);
+      yield* streamOpenRouter(apiKey, message, financialSummary, conversationHistory);
       break;
     default:
       throw new Error(`Unsupported provider: ${provider}`);
@@ -149,7 +221,7 @@ ${context}`;
   return response.text();
 }
 
-async function* streamGemini(apiKey: string, message: string, context: string): AsyncGenerator<string> {
+async function* streamGemini(apiKey: string, message: string, context: string, conversationHistory: AIMessage[] = []): AsyncGenerator<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
@@ -197,7 +269,7 @@ ${context}`;
   return data.choices?.[0]?.message?.content || 'No response';
 }
 
-async function* streamChatGPT(apiKey: string, message: string, context: string): AsyncGenerator<string> {
+async function* streamChatGPT(apiKey: string, message: string, context: string, conversationHistory: AIMessage[] = []): AsyncGenerator<string> {
   const systemPrompt = `You are a helpful financial advisor assistant. You help users understand their spending patterns, create budgets, and achieve their financial goals. Be concise, friendly, and actionable in your advice.
 
 ${context}`;
@@ -285,7 +357,7 @@ ${context}`;
   return data.content?.[0]?.text || 'No response';
 }
 
-async function* streamClaude(apiKey: string, message: string, context: string): AsyncGenerator<string> {
+async function* streamClaude(apiKey: string, message: string, context: string, conversationHistory: AIMessage[] = []): AsyncGenerator<string> {
   const systemPrompt = `You are a helpful financial advisor assistant. You help users understand their spending patterns, create budgets, and achieve their financial goals. Be concise, friendly, and actionable in your advice.
 
 ${context}`;
@@ -376,7 +448,7 @@ ${context}`;
   return data.choices?.[0]?.message?.content || 'No response';
 }
 
-async function* streamOpenRouter(apiKey: string, message: string, context: string): AsyncGenerator<string> {
+async function* streamOpenRouter(apiKey: string, message: string, context: string, conversationHistory: AIMessage[] = []): AsyncGenerator<string> {
   const systemPrompt = `You are a helpful financial advisor assistant. You help users understand their spending patterns, create budgets, and achieve their financial goals. Be concise, friendly, and actionable in your advice.
 
 ${context}`;
